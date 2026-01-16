@@ -1,1 +1,28 @@
 project_id = "dnpnzmlemabyiyqfpcfs"
+
+[functions.admin-dashboard]
+verify_jwt = false
+
+[functions.admin-events-publish]
+verify_jwt = false
+
+[functions.admin-events-unpublish]
+verify_jwt = false
+
+[functions.admin-pricing-recompute]
+verify_jwt = false
+
+[functions.admin-originals-publish]
+verify_jwt = false
+
+[functions.admin-originals-unpublish]
+verify_jwt = false
+
+[functions.admin-lists-rebuild]
+verify_jwt = false
+
+[functions.admin-n8n-trigger]
+verify_jwt = false
+
+[functions.admin-audit-log]
+verify_jwt = false
