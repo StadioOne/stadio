@@ -10,24 +10,42 @@ import { Loader2 } from "lucide-react";
 
 export default function LoginPage() {
   const { t } = useTranslation();
-  const { signIn } = useAuth();
+  const { signIn, signUp } = useAuth();
   const { toast } = useToast();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [fullName, setFullName] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isSignUp, setIsSignUp] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
-    const { error } = await signIn(email, password);
-
-    if (error) {
-      toast({
-        variant: "destructive",
-        title: t("auth.invalidCredentials"),
-        description: error.message,
-      });
+    if (isSignUp) {
+      const { error } = await signUp(email, password, fullName);
+      if (error) {
+        toast({
+          variant: "destructive",
+          title: t("auth.signUpError"),
+          description: error.message,
+        });
+      } else {
+        toast({
+          title: t("auth.signUpSuccess"),
+          description: t("auth.signUpSuccessDesc"),
+        });
+        setIsSignUp(false);
+      }
+    } else {
+      const { error } = await signIn(email, password);
+      if (error) {
+        toast({
+          variant: "destructive",
+          title: t("auth.invalidCredentials"),
+          description: error.message,
+        });
+      }
     }
 
     setIsLoading(false);
@@ -41,10 +59,25 @@ export default function LoginPage() {
             <span className="text-primary-foreground font-bold text-xl">S</span>
           </div>
           <CardTitle className="text-2xl">Stadio Admin</CardTitle>
-          <CardDescription>{t("auth.login")}</CardDescription>
+          <CardDescription>
+            {isSignUp ? t("auth.createAccount") : t("auth.login")}
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
+            {isSignUp && (
+              <div className="space-y-2">
+                <Label htmlFor="fullName">{t("auth.fullName")}</Label>
+                <Input
+                  id="fullName"
+                  type="text"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  placeholder="John Doe"
+                  required={isSignUp}
+                />
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="email">{t("auth.email")}</Label>
               <Input
@@ -63,6 +96,7 @@ export default function LoginPage() {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                minLength={6}
                 required
               />
             </div>
@@ -70,12 +104,37 @@ export default function LoginPage() {
               {isLoading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  {t("auth.signingIn")}
+                  {isSignUp ? t("auth.signingUp") : t("auth.signingIn")}
                 </>
               ) : (
-                t("auth.signIn")
+                isSignUp ? t("auth.signUp") : t("auth.signIn")
               )}
             </Button>
+            <div className="text-center text-sm text-muted-foreground">
+              {isSignUp ? (
+                <>
+                  {t("auth.alreadyHaveAccount")}{" "}
+                  <button
+                    type="button"
+                    onClick={() => setIsSignUp(false)}
+                    className="text-primary hover:underline"
+                  >
+                    {t("auth.signIn")}
+                  </button>
+                </>
+              ) : (
+                <>
+                  {t("auth.noAccount")}{" "}
+                  <button
+                    type="button"
+                    onClick={() => setIsSignUp(true)}
+                    className="text-primary hover:underline"
+                  >
+                    {t("auth.signUp")}
+                  </button>
+                </>
+              )}
+            </div>
           </form>
         </CardContent>
       </Card>
