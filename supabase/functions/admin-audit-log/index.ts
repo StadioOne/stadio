@@ -15,6 +15,22 @@ interface AuditFilters {
   offset?: number;
 }
 
+// Maximum length for string filters to prevent abuse
+const MAX_FILTER_LENGTH = 100;
+
+// Escape special LIKE pattern characters to prevent injection
+function escapeLikePattern(str: string): string {
+  return str.replace(/[%_\\]/g, '\\$&');
+}
+
+// Validate and sanitize string filter input
+function sanitizeStringFilter(value: string | null, maxLength: number = MAX_FILTER_LENGTH): string | undefined {
+  if (!value || typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  if (trimmed.length === 0 || trimmed.length > maxLength) return undefined;
+  return trimmed;
+}
+
 serve(async (req) => {
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
@@ -30,15 +46,15 @@ serve(async (req) => {
       return errorResponse(authResult.error, authResult.status);
     }
 
-    // Parse query parameters
+    // Parse and sanitize query parameters
     const url = new URL(req.url);
     const filters: AuditFilters = {
-      userId: url.searchParams.get('userId') || undefined,
-      action: url.searchParams.get('action') || undefined,
-      entityType: url.searchParams.get('entityType') || undefined,
-      entityId: url.searchParams.get('entityId') || undefined,
-      startDate: url.searchParams.get('startDate') || undefined,
-      endDate: url.searchParams.get('endDate') || undefined,
+      userId: sanitizeStringFilter(url.searchParams.get('userId')),
+      action: sanitizeStringFilter(url.searchParams.get('action')),
+      entityType: sanitizeStringFilter(url.searchParams.get('entityType')),
+      entityId: sanitizeStringFilter(url.searchParams.get('entityId')),
+      startDate: sanitizeStringFilter(url.searchParams.get('startDate')),
+      endDate: sanitizeStringFilter(url.searchParams.get('endDate')),
       limit: parseInt(url.searchParams.get('limit') || '50'),
       offset: parseInt(url.searchParams.get('offset') || '0'),
     };
@@ -64,7 +80,9 @@ serve(async (req) => {
       query = query.eq('user_id', filters.userId);
     }
     if (filters.action) {
-      query = query.ilike('action', `%${filters.action}%`);
+      // Escape special LIKE characters to prevent pattern injection
+      const escapedAction = escapeLikePattern(filters.action);
+      query = query.ilike('action', `%${escapedAction}%`);
     }
     if (filters.entityType) {
       query = query.eq('entity_type', filters.entityType);
