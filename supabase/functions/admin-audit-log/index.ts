@@ -1,19 +1,32 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
 import { handleCors } from '../_shared/cors.ts';
-import { authenticateAdmin, isAuthError } from '../_shared/auth.ts';
+import { authenticateAdmin, isAuthError, type AdminRole } from '../_shared/auth.ts';
 import { successResponse, errorResponse } from '../_shared/response.ts';
 
+/**
+ * GET /admin-audit-log
+ * 
+ * Role-based access:
+ * - owner: full access
+ * - admin: full access
+ * - editor: limited to events, originals, categories
+ * - support: read-only all
+ */
+
 interface AuditFilters {
-  userId?: string;
-  action?: string;
-  entityType?: string;
+  entity?: string;
   entityId?: string;
-  startDate?: string;
-  endDate?: string;
+  actorUserId?: string;
+  action?: string;
+  dateFrom?: string;
+  dateTo?: string;
   limit?: number;
   offset?: number;
 }
+
+// Entities accessible by editors
+const EDITOR_ALLOWED_ENTITIES = ['events', 'originals', 'categories'];
 
 // Maximum length for string filters to prevent abuse
 const MAX_FILTER_LENGTH = 100;
@@ -40,21 +53,23 @@ serve(async (req) => {
   }
 
   try {
-    // Authenticate - requires admin or owner to view audit logs
-    const authResult = await authenticateAdmin(req, ['admin']);
+    // Authenticate - all admin roles can access (with different visibility)
+    const authResult = await authenticateAdmin(req, ['support']);
     if (isAuthError(authResult)) {
       return errorResponse(authResult.error, authResult.status);
     }
 
-    // Parse and sanitize query parameters
+    const { role } = authResult;
+
+    // Parse and sanitize query parameters (aligned with spec)
     const url = new URL(req.url);
     const filters: AuditFilters = {
-      userId: sanitizeStringFilter(url.searchParams.get('userId')),
-      action: sanitizeStringFilter(url.searchParams.get('action')),
-      entityType: sanitizeStringFilter(url.searchParams.get('entityType')),
+      entity: sanitizeStringFilter(url.searchParams.get('entity')),
       entityId: sanitizeStringFilter(url.searchParams.get('entityId')),
-      startDate: sanitizeStringFilter(url.searchParams.get('startDate')),
-      endDate: sanitizeStringFilter(url.searchParams.get('endDate')),
+      actorUserId: sanitizeStringFilter(url.searchParams.get('actorUserId')),
+      action: sanitizeStringFilter(url.searchParams.get('action')),
+      dateFrom: sanitizeStringFilter(url.searchParams.get('dateFrom')),
+      dateTo: sanitizeStringFilter(url.searchParams.get('dateTo')),
       limit: parseInt(url.searchParams.get('limit') || '50'),
       offset: parseInt(url.searchParams.get('offset') || '0'),
     };
@@ -75,26 +90,34 @@ serve(async (req) => {
       .select('*', { count: 'exact' })
       .order('created_at', { ascending: false });
 
+    // Role-based filtering: editor can only see specific entities
+    if (role === 'editor') {
+      if (filters.entity && !EDITOR_ALLOWED_ENTITIES.includes(filters.entity)) {
+        return errorResponse(`Access denied: editors cannot view ${filters.entity} logs`, 403);
+      }
+      // Restrict to allowed entities
+      query = query.in('entity', EDITOR_ALLOWED_ENTITIES);
+    }
+
     // Apply filters
-    if (filters.userId) {
-      query = query.eq('user_id', filters.userId);
+    if (filters.actorUserId) {
+      query = query.eq('actor_user_id', filters.actorUserId);
     }
     if (filters.action) {
-      // Escape special LIKE characters to prevent pattern injection
       const escapedAction = escapeLikePattern(filters.action);
       query = query.ilike('action', `%${escapedAction}%`);
     }
-    if (filters.entityType) {
-      query = query.eq('entity_type', filters.entityType);
+    if (filters.entity) {
+      query = query.eq('entity', filters.entity);
     }
     if (filters.entityId) {
       query = query.eq('entity_id', filters.entityId);
     }
-    if (filters.startDate) {
-      query = query.gte('created_at', filters.startDate);
+    if (filters.dateFrom) {
+      query = query.gte('created_at', filters.dateFrom);
     }
-    if (filters.endDate) {
-      query = query.lte('created_at', filters.endDate);
+    if (filters.dateTo) {
+      query = query.lte('created_at', filters.dateTo);
     }
 
     // Apply pagination
@@ -106,14 +129,36 @@ serve(async (req) => {
     const { data, error, count } = await query;
 
     if (error) {
+      console.error('Audit log query error:', error);
       return errorResponse(`Failed to fetch audit logs: ${error.message}`, 500);
     }
 
-    return successResponse(data, {
-      total: count || 0,
-      limit: filters.limit || 50,
-      offset: filters.offset || 0,
-      hasMore: (count || 0) > (filters.offset || 0) + (data?.length || 0),
+    // Normalize response for DataTable consumption
+    const logs = data?.map(log => ({
+      id: log.id,
+      actorUserId: log.actor_user_id,
+      actorEmail: log.actor_email,
+      actorRole: log.actor_role,
+      action: log.action,
+      entity: log.entity,
+      entityId: log.entity_id,
+      diff: {
+        before: log.old_values,
+        after: log.new_values,
+      },
+      metadata: log.metadata,
+      createdAt: log.created_at,
+      ipAddress: log.ip_address,
+    }));
+
+    return successResponse({
+      logs,
+      pagination: {
+        total: count || 0,
+        limit: filters.limit || 50,
+        offset: filters.offset || 0,
+        hasMore: (count || 0) > (filters.offset || 0) + (data?.length || 0),
+      },
     });
   } catch (error) {
     console.error('Audit log error:', error);

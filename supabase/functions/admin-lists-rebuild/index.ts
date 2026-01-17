@@ -24,7 +24,7 @@ serve(async (req) => {
       return errorResponse(authResult.error, authResult.status);
     }
 
-    const { userId, userEmail, supabase } = authResult;
+    const { userId, userEmail, role } = authResult;
     const body = await req.json().catch(() => ({}));
     const { categoryId }: RebuildRequest = body;
 
@@ -96,21 +96,30 @@ serve(async (req) => {
         .eq('id', category.id);
     }
 
-    // Log audit
+    // Log audit with new signature
     const { ipAddress, userAgent } = getRequestMetadata(req);
-    await logAudit(supabase, {
-      userId,
-      userEmail,
+    await logAudit({
+      actorUserId: userId,
+      actorEmail: userEmail,
+      actorRole: role,
       action: 'lists.rebuild',
-      entityType: 'categories',
+      entity: 'categories',
       entityId: categoryId || undefined,
-      newValues: { 
+      before: undefined,
+      after: { 
         categoriesProcessed: categoriesToRebuild.length,
         results: results.map(r => ({ id: r.categoryId, matched: r.eventsMatched }))
+      },
+      metadata: { 
+        source: 'admin_api',
+        batch: !categoryId,
+        categoryCount: categoriesToRebuild.length
       },
       ipAddress,
       userAgent,
     });
+
+    console.log(`Lists rebuilt: ${categoriesToRebuild.length} categories processed by ${userEmail}`);
 
     return successResponse({
       categoriesProcessed: categoriesToRebuild.length,
