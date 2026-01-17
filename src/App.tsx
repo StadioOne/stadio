@@ -8,6 +8,15 @@ import { ThemeProvider } from "@/contexts/ThemeContext";
 import { AdminLayout } from "@/components/admin/AdminLayout";
 import LoginPage from "@/pages/LoginPage";
 import DashboardPage from "@/pages/DashboardPage";
+import EventsPage from "@/pages/EventsPage";
+import PricingPage from "@/pages/PricingPage";
+import CategoriesPage from "@/pages/CategoriesPage";
+import OriginalsPage from "@/pages/OriginalsPage";
+import AuthorsPage from "@/pages/AuthorsPage";
+import UsersPage from "@/pages/UsersPage";
+import AuditLogPage from "@/pages/AuditLogPage";
+import WorkflowsPage from "@/pages/WorkflowsPage";
+import AnalyticsPage from "@/pages/AnalyticsPage";
 import NotFound from "@/pages/NotFound";
 import "@/lib/i18n";
 
@@ -55,15 +64,15 @@ function AppRoutes() {
         }
       >
         <Route path="/" element={<DashboardPage />} />
-        <Route path="/events" element={<DashboardPage />} />
-        <Route path="/pricing" element={<DashboardPage />} />
-        <Route path="/categories" element={<DashboardPage />} />
-        <Route path="/originals" element={<DashboardPage />} />
-        <Route path="/authors" element={<DashboardPage />} />
-        <Route path="/users" element={<DashboardPage />} />
-        <Route path="/audit" element={<DashboardPage />} />
-        <Route path="/workflows" element={<DashboardPage />} />
-        <Route path="/analytics" element={<DashboardPage />} />
+        <Route path="/events" element={<EventsPage />} />
+        <Route path="/pricing" element={<PricingPage />} />
+        <Route path="/categories" element={<CategoriesPage />} />
+        <Route path="/originals" element={<OriginalsPage />} />
+        <Route path="/authors" element={<AuthorsPage />} />
+        <Route path="/users" element={<UsersPage />} />
+        <Route path="/audit" element={<AuditLogPage />} />
+        <Route path="/workflows" element={<WorkflowsPage />} />
+        <Route path="/analytics" element={<AnalyticsPage />} />
       </Route>
 
       <Route path="*" element={<NotFound />} />
