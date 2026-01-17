@@ -47,6 +47,93 @@ export type Database = {
         }
         Relationships: []
       }
+      analytics_daily: {
+        Row: {
+          aggregated_at: string | null
+          country: string
+          date: string
+          entity_id: string
+          entity_type: string
+          likes: number | null
+          purchases: number | null
+          revenue: number | null
+          views: number | null
+        }
+        Insert: {
+          aggregated_at?: string | null
+          country?: string
+          date: string
+          entity_id: string
+          entity_type: string
+          likes?: number | null
+          purchases?: number | null
+          revenue?: number | null
+          views?: number | null
+        }
+        Update: {
+          aggregated_at?: string | null
+          country?: string
+          date?: string
+          entity_id?: string
+          entity_type?: string
+          likes?: number | null
+          purchases?: number | null
+          revenue?: number | null
+          views?: number | null
+        }
+        Relationships: []
+      }
+      analytics_events: {
+        Row: {
+          city: string | null
+          content_id: string | null
+          country: string | null
+          created_at: string | null
+          event_type: string
+          fixture_id: string | null
+          id: string
+          metadata: Json | null
+          user_id: string | null
+        }
+        Insert: {
+          city?: string | null
+          content_id?: string | null
+          country?: string | null
+          created_at?: string | null
+          event_type: string
+          fixture_id?: string | null
+          id?: string
+          metadata?: Json | null
+          user_id?: string | null
+        }
+        Update: {
+          city?: string | null
+          content_id?: string | null
+          country?: string | null
+          created_at?: string | null
+          event_type?: string
+          fixture_id?: string | null
+          id?: string
+          metadata?: Json | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "analytics_events_content_id_fkey"
+            columns: ["content_id"]
+            isOneToOne: false
+            referencedRelation: "originals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analytics_events_fixture_id_fkey"
+            columns: ["fixture_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       audit_log: {
         Row: {
           action: string
