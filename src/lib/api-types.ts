@@ -103,3 +103,94 @@ export type Profile = Database['public']['Tables']['profiles']['Row'];
 // User role types
 export type UserRole = Database['public']['Tables']['user_roles']['Row'];
 export type AdminRole = Database['public']['Enums']['admin_role'];
+
+// Analytics types
+export interface AnalyticsOverview {
+  totalRevenue: number | null;
+  totalPurchases: number;
+  totalViews: number;
+  totalLikes: number;
+  topCountries: CountryStats[];
+  topFixtures: FixtureStats[];
+  topContents: ContentStats[];
+  period: { from: string; to: string };
+}
+
+export interface CountryStats {
+  country: string;
+  views: number;
+  purchases: number;
+  revenue: number;
+  percentage: number;
+}
+
+export interface FixtureStats {
+  fixtureId: string;
+  title: string;
+  sport: string;
+  league?: string | null;
+  eventDate?: string | null;
+  views: number;
+  purchases: number;
+  revenue: number;
+  pricingTier?: string | null;
+  topCountries: string[];
+}
+
+export interface ContentStats {
+  contentId: string;
+  title: string;
+  type: string;
+  views: number;
+  likes: number;
+  topCountries: string[];
+}
+
+export interface AnalyticsFilters {
+  dateFrom?: string;
+  dateTo?: string;
+  country?: string;
+  type?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface GeoConcentration {
+  top3Percentage: number;
+  top5Percentage: number;
+  top10Percentage: number;
+}
+
+export interface GeoAnalytics {
+  byCountry: CountryStats[];
+  concentration: GeoConcentration;
+  totalCountries: number;
+}
+
+export interface FixturesAnalyticsResponse {
+  fixtures: FixtureStats[];
+  pagination: {
+    total: number;
+    limit: number;
+    offset: number;
+    hasMore: boolean;
+  };
+}
+
+export interface OriginalsAnalyticsResponse {
+  originals: ContentStats[];
+  pagination: {
+    total: number;
+    limit: number;
+    offset: number;
+    hasMore: boolean;
+  };
+}
+
+export interface AggregationResult {
+  date: string;
+  fixturesProcessed: number;
+  contentsProcessed: number;
+  totalRowsUpserted: number;
+  durationMs: number;
+}

@@ -12,6 +12,12 @@ import type {
   AuditFilters,
   PaginatedResult,
   PricingRecomputeParams,
+  AnalyticsOverview,
+  AnalyticsFilters,
+  FixturesAnalyticsResponse,
+  OriginalsAnalyticsResponse,
+  GeoAnalytics,
+  AggregationResult,
 } from './api-types';
 
 // Error class for API errors
@@ -142,6 +148,47 @@ export const adminApi = {
           };
         });
     },
+  },
+
+  // Analytics
+  analytics: {
+    getOverview: (dateFrom?: string, dateTo?: string): Promise<AnalyticsOverview> => {
+      const queryParams: Record<string, string> = {};
+      if (dateFrom) queryParams.dateFrom = dateFrom;
+      if (dateTo) queryParams.dateTo = dateTo;
+      return callEdgeFunction<AnalyticsOverview>('admin-analytics-overview', 'GET', undefined, queryParams);
+    },
+
+    getFixtures: (filters?: AnalyticsFilters): Promise<FixturesAnalyticsResponse> => {
+      const queryParams: Record<string, string> = {};
+      if (filters?.dateFrom) queryParams.dateFrom = filters.dateFrom;
+      if (filters?.dateTo) queryParams.dateTo = filters.dateTo;
+      if (filters?.country) queryParams.country = filters.country;
+      if (filters?.limit) queryParams.limit = filters.limit.toString();
+      if (filters?.offset) queryParams.offset = filters.offset.toString();
+      return callEdgeFunction<FixturesAnalyticsResponse>('admin-analytics-fixtures', 'GET', undefined, queryParams);
+    },
+
+    getOriginals: (filters?: AnalyticsFilters): Promise<OriginalsAnalyticsResponse> => {
+      const queryParams: Record<string, string> = {};
+      if (filters?.dateFrom) queryParams.dateFrom = filters.dateFrom;
+      if (filters?.dateTo) queryParams.dateTo = filters.dateTo;
+      if (filters?.type) queryParams.type = filters.type;
+      if (filters?.limit) queryParams.limit = filters.limit.toString();
+      if (filters?.offset) queryParams.offset = filters.offset.toString();
+      return callEdgeFunction<OriginalsAnalyticsResponse>('admin-analytics-originals', 'GET', undefined, queryParams);
+    },
+
+    getGeo: (dateFrom?: string, dateTo?: string, entityType?: string): Promise<GeoAnalytics> => {
+      const queryParams: Record<string, string> = {};
+      if (dateFrom) queryParams.dateFrom = dateFrom;
+      if (dateTo) queryParams.dateTo = dateTo;
+      if (entityType) queryParams.entityType = entityType;
+      return callEdgeFunction<GeoAnalytics>('admin-analytics-geo', 'GET', undefined, queryParams);
+    },
+
+    aggregate: (date?: string): Promise<AggregationResult> =>
+      callEdgeFunction<AggregationResult>('admin-analytics-aggregate', 'POST', date ? { date } : {}),
   },
 };
 
