@@ -3,7 +3,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
 import { handleCors } from '../_shared/cors.ts';
 import { authenticateAdmin, isAuthError } from '../_shared/auth.ts';
 import { successResponse, errorResponse } from '../_shared/response.ts';
-import { logAudit, getRequestMetadata } from '../_shared/audit.ts';
+import { logAudit, getRequestMetadata, cleanDiff } from '../_shared/audit.ts';
 
 interface PublishRequest {
   id: string;
@@ -24,7 +24,7 @@ serve(async (req) => {
       return errorResponse(authResult.error, authResult.status);
     }
 
-    const { userId, userEmail, supabase } = authResult;
+    const { userId, userEmail, role } = authResult;
     const { id }: PublishRequest = await req.json();
 
     if (!id) {
@@ -47,14 +47,22 @@ serve(async (req) => {
       return errorResponse('Original content not found', 404);
     }
 
+    // Check if already published (idempotence)
+    if (currentOriginal.status === 'published') {
+      console.log(`Original ${id} is already published`);
+      return successResponse(currentOriginal);
+    }
+
+    const now = new Date().toISOString();
+
     // Update original status
     const { data: updatedOriginal, error: updateError } = await serviceClient
       .from('originals')
       .update({ 
         status: 'published',
-        published_at: new Date().toISOString(),
+        published_at: now,
         updated_by: userId,
-        updated_at: new Date().toISOString()
+        updated_at: now
       })
       .eq('id', id)
       .select()
@@ -64,20 +72,33 @@ serve(async (req) => {
       return errorResponse(`Failed to publish original: ${updateError.message}`, 500);
     }
 
-    // Log audit
+    // Log audit with new signature
     const { ipAddress, userAgent } = getRequestMetadata(req);
-    await logAudit(supabase, {
-      userId,
-      userEmail,
+    await logAudit({
+      actorUserId: userId,
+      actorEmail: userEmail,
+      actorRole: role,
       action: 'original.publish',
-      entityType: 'originals',
+      entity: 'originals',
       entityId: id,
-      oldValues: { status: currentOriginal.status },
-      newValues: { status: 'published' },
+      before: cleanDiff({ 
+        status: currentOriginal.status,
+        published_at: currentOriginal.published_at 
+      }),
+      after: cleanDiff({ 
+        status: 'published',
+        published_at: now 
+      }),
+      metadata: { 
+        source: 'admin_api',
+        originalType: currentOriginal.type,
+        title: currentOriginal.title_fr
+      },
       ipAddress,
       userAgent,
     });
 
+    console.log(`Original ${id} published successfully by ${userEmail}`);
     return successResponse(updatedOriginal);
   } catch (error) {
     console.error('Publish original error:', error);

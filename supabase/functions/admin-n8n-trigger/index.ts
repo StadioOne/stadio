@@ -52,7 +52,7 @@ serve(async (req) => {
       return errorResponse(authResult.error, authResult.status);
     }
 
-    const { userId, userEmail, supabase } = authResult;
+    const { userId, userEmail, role } = authResult;
 
     const serviceClient = createClient(
       Deno.env.get('SUPABASE_URL')!,
@@ -148,18 +148,31 @@ serve(async (req) => {
         .update({ status: 'running' })
         .eq('id', workflowRun.id);
 
-      // Log audit
+      // Log audit with new signature
       const { ipAddress, userAgent } = getRequestMetadata(req);
-      await logAudit(supabase, {
-        userId,
-        userEmail,
+      await logAudit({
+        actorUserId: userId,
+        actorEmail: userEmail,
+        actorRole: role,
         action: 'workflow.trigger',
-        entityType: 'workflow_runs',
+        entity: 'workflow_runs',
         entityId: workflowRun.id,
-        newValues: { workflow, params },
+        before: undefined,
+        after: { 
+          workflow, 
+          params,
+          status: 'running'
+        },
+        metadata: { 
+          source: 'admin_api',
+          workflowType: 'n8n',
+          workflowName: workflow
+        },
         ipAddress,
         userAgent,
       });
+
+      console.log(`Workflow ${workflow} triggered by ${userEmail} (run: ${workflowRun.id})`);
 
       return successResponse({
         workflowRunId: workflowRun.id,

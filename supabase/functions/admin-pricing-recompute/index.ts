@@ -3,7 +3,7 @@ import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-
 import { handleCors } from '../_shared/cors.ts';
 import { authenticateAdmin, isAuthError } from '../_shared/auth.ts';
 import { successResponse, errorResponse } from '../_shared/response.ts';
-import { logAudit, getRequestMetadata } from '../_shared/audit.ts';
+import { logAudit, getRequestMetadata, cleanDiff } from '../_shared/audit.ts';
 import { validatePayload, pricingRecomputeSchema, type PricingRecomputeRequest, type PricingTier } from '../_shared/validation.ts';
 
 interface PricingConfig {
@@ -243,7 +243,7 @@ serve(async (req) => {
       return errorResponse(authResult.error, authResult.status);
     }
 
-    const { userId, userEmail, supabase } = authResult;
+    const { userId, userEmail, role } = authResult;
 
     // Parse and validate payload with Zod
     let rawBody: unknown;
@@ -314,21 +314,27 @@ serve(async (req) => {
         }
       }
 
-      // Log batch audit
-      await logAudit(supabase, {
-        userId,
-        userEmail,
+      // Log batch audit with new signature
+      await logAudit({
+        actorUserId: userId,
+        actorEmail: userEmail,
+        actorRole: role,
         action: 'pricing.batch_recompute',
-        entityType: 'event_pricing',
+        entity: 'event_pricing',
         entityId: undefined,
-        oldValues: undefined,
-        newValues: {
+        before: undefined,
+        after: {
           processed: results.length,
           summary: results.map(r => ({
             eventId: r.eventId,
             tier: r.newTier,
             price: r.newPrice
           }))
+        },
+        metadata: { 
+          source: 'admin_api',
+          batch: true,
+          eventCount: results.length
         },
         ipAddress,
         userAgent,
@@ -366,22 +372,24 @@ serve(async (req) => {
         } : undefined
       );
 
-      // Log audit for single event
-      await logAudit(supabase, {
-        userId,
-        userEmail,
-        action: 'pricing.recompute',
-        entityType: 'event_pricing',
+      // Log audit for single event with new signature
+      await logAudit({
+        actorUserId: userId,
+        actorEmail: userEmail,
+        actorRole: role,
+        action: isManualOverride ? 'pricing.manual_override' : 'pricing.recompute',
+        entity: 'event_pricing',
         entityId: eventId!,
-        oldValues: {
+        before: cleanDiff({
           price: result.previousPrice,
           tier: result.previousTier
-        },
-        newValues: {
+        }),
+        after: cleanDiff({
           price: result.newPrice,
           tier: result.newTier,
           isManualOverride: result.isManualOverride
-        },
+        }),
+        metadata: { source: 'admin_api' },
         ipAddress,
         userAgent,
       });

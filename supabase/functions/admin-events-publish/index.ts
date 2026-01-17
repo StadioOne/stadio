@@ -3,7 +3,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
 import { handleCors } from '../_shared/cors.ts';
 import { authenticateAdmin, isAuthError } from '../_shared/auth.ts';
 import { successResponse, errorResponse } from '../_shared/response.ts';
-import { logAudit, getRequestMetadata } from '../_shared/audit.ts';
+import { logAudit, getRequestMetadata, cleanDiff } from '../_shared/audit.ts';
 import { validatePayload, publishRequestSchema, type PublishRequest } from '../_shared/validation.ts';
 
 serve(async (req) => {
@@ -21,7 +21,7 @@ serve(async (req) => {
       return errorResponse(authResult.error, authResult.status);
     }
 
-    const { userId, userEmail, supabase } = authResult;
+    const { userId, userEmail, role } = authResult;
     
     // Parse and validate payload with Zod
     let rawBody: unknown;
@@ -129,22 +129,24 @@ serve(async (req) => {
       }
     }
 
-    // Log audit
+    // Log audit with new signature
     const { ipAddress, userAgent } = getRequestMetadata(req);
-    await logAudit(supabase, {
-      userId,
-      userEmail,
+    await logAudit({
+      actorUserId: userId,
+      actorEmail: userEmail,
+      actorRole: role,
       action: 'event.publish',
-      entityType: 'events',
+      entity: 'events',
       entityId: eventId,
-      oldValues: { 
+      before: cleanDiff({ 
         status: currentEvent.status,
         published_at: currentEvent.published_at 
-      },
-      newValues: { 
+      }),
+      after: cleanDiff({ 
         status: 'published',
         published_at: now 
-      },
+      }),
+      metadata: { source: 'admin_api' },
       ipAddress,
       userAgent,
     });
