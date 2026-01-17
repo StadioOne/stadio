@@ -296,6 +296,7 @@ export type Database = {
           override_description: string | null
           override_image_url: string | null
           override_title: string | null
+          published_at: string | null
           sport: string
           status: Database["public"]["Enums"]["content_status"]
           updated_at: string
@@ -320,6 +321,7 @@ export type Database = {
           override_description?: string | null
           override_image_url?: string | null
           override_title?: string | null
+          published_at?: string | null
           sport: string
           status?: Database["public"]["Enums"]["content_status"]
           updated_at?: string
@@ -344,6 +346,7 @@ export type Database = {
           override_description?: string | null
           override_image_url?: string | null
           override_title?: string | null
+          published_at?: string | null
           sport?: string
           status?: Database["public"]["Enums"]["content_status"]
           updated_at?: string
@@ -436,6 +439,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      pricing_config: {
+        Row: {
+          base_price: number
+          created_at: string | null
+          id: string
+          max_price: number
+          min_price: number
+          tier: Database["public"]["Enums"]["pricing_tier"]
+          updated_at: string | null
+        }
+        Insert: {
+          base_price?: number
+          created_at?: string | null
+          id?: string
+          max_price?: number
+          min_price?: number
+          tier: Database["public"]["Enums"]["pricing_tier"]
+          updated_at?: string | null
+        }
+        Update: {
+          base_price?: number
+          created_at?: string | null
+          id?: string
+          max_price?: number
+          min_price?: number
+          tier?: Database["public"]["Enums"]["pricing_tier"]
+          updated_at?: string | null
+        }
+        Relationships: []
       }
       profiles: {
         Row: {
@@ -556,6 +589,10 @@ export type Database = {
         Returns: boolean
       }
       is_admin: { Args: { _user_id: string }; Returns: boolean }
+      remove_event_from_pinned: {
+        Args: { _event_id: string }
+        Returns: undefined
+      }
     }
     Enums: {
       admin_role: "owner" | "admin" | "editor" | "support"
