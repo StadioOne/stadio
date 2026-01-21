@@ -6,8 +6,9 @@ import { successResponse, errorResponse } from "../_shared/response.ts";
 const API_FOOTBALL_BASE_URL = "https://v3.football.api-sports.io";
 
 interface SyncRequest {
-  action: "sync_leagues" | "sync_fixtures" | "sync_teams" | "sync_all" | "check_status";
+  action: "sync_leagues" | "sync_fixtures" | "sync_teams" | "sync_all" | "check_status" | "get_fixtures_preview" | "import_fixtures";
   leagueIds?: number[];
+  fixtureIds?: number[];
   dateFrom?: string;
   dateTo?: string;
   season?: number;
@@ -604,6 +605,198 @@ Deno.serve(async (req) => {
           fixtures: fixturesResult,
         };
         break;
+      }
+
+      case "get_fixtures_preview": {
+        const ids = leagueIds || [];
+        if (!ids.length) {
+          return errorResponse("leagueIds is required for get_fixtures_preview", 400);
+        }
+
+        const currentSeason = season || new Date().getFullYear();
+        const fixtures: Array<{
+          id: number;
+          date: string;
+          homeTeam: string;
+          awayTeam: string;
+          homeLogo: string;
+          awayLogo: string;
+          venue: string | null;
+          round: string;
+          status: string;
+        }> = [];
+
+        for (const leagueId of ids) {
+          try {
+            const apiFixtures = await fetchFromApiFootball<ApiFootballFixture>(
+              "/fixtures",
+              {
+                league: leagueId,
+                season: currentSeason,
+                from: dateFrom || defaultDateFrom,
+                to: dateTo || defaultDateTo,
+              }
+            );
+
+            for (const f of apiFixtures) {
+              fixtures.push({
+                id: f.fixture.id,
+                date: f.fixture.date,
+                homeTeam: f.teams.home.name,
+                awayTeam: f.teams.away.name,
+                homeLogo: f.teams.home.logo,
+                awayLogo: f.teams.away.logo,
+                venue: f.fixture.venue?.name || null,
+                round: f.league.round,
+                status: f.fixture.status.short,
+              });
+            }
+          } catch (err) {
+            console.error(`Error fetching fixtures for league ${leagueId}:`, err);
+          }
+        }
+
+        return successResponse({
+          action: "get_fixtures_preview",
+          fixtures,
+        });
+      }
+
+      case "import_fixtures": {
+        const fixtureIdsToImport = body.fixtureIds || [];
+        if (!fixtureIdsToImport.length) {
+          return errorResponse("fixtureIds is required for import_fixtures", 400);
+        }
+
+        const currentSeason = season || new Date().getFullYear();
+        let created = 0;
+        let updated = 0;
+        const errors: string[] = [];
+
+        // Get league and team mappings
+        const { data: leagues } = await supabase
+          .from("leagues")
+          .select("id, external_id") as { data: LeagueRow[] | null };
+        const { data: teams } = await supabase
+          .from("teams")
+          .select("id, external_id") as { data: TeamRow[] | null };
+
+        const leagueMap = new Map(leagues?.map((l) => [l.external_id, l.id]) || []);
+        const teamMap = new Map(teams?.map((t) => [t.external_id, t.id]) || []);
+
+        // Fetch each fixture by ID
+        for (const fixtureId of fixtureIdsToImport) {
+          try {
+            const fixtures = await fetchFromApiFootball<ApiFootballFixture>(
+              "/fixtures",
+              { id: fixtureId }
+            );
+
+            if (!fixtures.length) continue;
+            const f = fixtures[0];
+
+            const externalId = String(f.fixture.id);
+            const leagueUuid = leagueMap.get(String(f.league.id));
+            const homeTeamUuid = teamMap.get(String(f.teams.home.id));
+            const awayTeamUuid = teamMap.get(String(f.teams.away.id));
+
+            const statusMap: Record<string, { status: string; isLive: boolean }> = {
+              NS: { status: "draft", isLive: false },
+              TBD: { status: "draft", isLive: false },
+              "1H": { status: "published", isLive: true },
+              HT: { status: "published", isLive: true },
+              "2H": { status: "published", isLive: true },
+              ET: { status: "published", isLive: true },
+              BT: { status: "published", isLive: true },
+              P: { status: "published", isLive: true },
+              SUSP: { status: "published", isLive: true },
+              INT: { status: "published", isLive: true },
+              LIVE: { status: "published", isLive: true },
+              FT: { status: "published", isLive: false },
+              AET: { status: "published", isLive: false },
+              PEN: { status: "published", isLive: false },
+              PST: { status: "archived", isLive: false },
+              CANC: { status: "archived", isLive: false },
+              ABD: { status: "archived", isLive: false },
+              AWD: { status: "archived", isLive: false },
+              WO: { status: "archived", isLive: false },
+            };
+
+            const matchStatus = f.fixture.status.short;
+            const stadioStatus = statusMap[matchStatus] || { status: "draft", isLive: false };
+
+            const eventData = {
+              external_id: externalId,
+              sport: "football",
+              league: f.league.name,
+              league_id: leagueUuid,
+              home_team: f.teams.home.name,
+              home_team_id: homeTeamUuid,
+              away_team: f.teams.away.name,
+              away_team_id: awayTeamUuid,
+              api_title: `${f.teams.home.name} vs ${f.teams.away.name}`,
+              api_description: `${f.league.name} - ${f.league.round}`,
+              api_image_url: f.teams.home.logo,
+              event_date: f.fixture.date,
+              venue: f.fixture.venue?.name,
+              round: f.league.round,
+              season: f.league.season,
+              match_status: matchStatus,
+              home_score: f.goals.home,
+              away_score: f.goals.away,
+              is_live: stadioStatus.isLive,
+              last_sync_at: new Date().toISOString(),
+            };
+
+            // Check if event exists
+            const { data: existing } = await supabase
+              .from("events")
+              .select("id, status")
+              .eq("external_id", externalId)
+              .maybeSingle() as { data: EventRow | null };
+
+            if (existing) {
+              const { error } = await supabase
+                .from("events")
+                .update({
+                  ...eventData,
+                  status: existing.status === "draft" ? stadioStatus.status : existing.status,
+                } as unknown)
+                .eq("id", existing.id);
+
+              if (error) {
+                errors.push(`Update fixture ${externalId}: ${error.message}`);
+              } else {
+                updated++;
+              }
+            } else {
+              const { error } = await supabase.from("events").insert({
+                ...eventData,
+                status: stadioStatus.status,
+              } as unknown);
+
+              if (error) {
+                errors.push(`Insert fixture ${externalId}: ${error.message}`);
+              } else {
+                created++;
+              }
+            }
+
+            // Rate limiting
+            await new Promise((resolve) => setTimeout(resolve, 100));
+          } catch (err) {
+            errors.push(
+              `Fixture ${fixtureId}: ${err instanceof Error ? err.message : String(err)}`
+            );
+          }
+        }
+
+        return successResponse({
+          action: "import_fixtures",
+          created,
+          updated,
+          errors,
+        });
       }
 
       default:

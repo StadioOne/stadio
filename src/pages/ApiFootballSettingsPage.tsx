@@ -4,7 +4,6 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -23,10 +22,13 @@ import {
   Database,
   Wifi,
   WifiOff,
-  AlertTriangle
+  AlertTriangle,
+  Search
 } from "lucide-react";
 import { format, addDays } from "date-fns";
 import { fr } from "date-fns/locale";
+import { LeagueCard } from "@/components/api-football/LeagueCard";
+import { LeagueDetailPanel } from "@/components/api-football/LeagueDetailPanel";
 
 interface League {
   id: string;
@@ -118,6 +120,9 @@ export default function ApiFootballSettingsPage() {
   const [dateFrom, setDateFrom] = useState(format(new Date(), "yyyy-MM-dd"));
   const [dateTo, setDateTo] = useState(format(addDays(new Date(), 14), "yyyy-MM-dd"));
   const [selectedLeagueIds, setSelectedLeagueIds] = useState<number[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedLeague, setSelectedLeague] = useState<League | null>(null);
+  const [detailPanelOpen, setDetailPanelOpen] = useState(false);
 
   // Check API status on mount
   const { data: apiStatus, isLoading: statusLoading, refetch: refetchStatus } = useQuery({
@@ -577,42 +582,43 @@ export default function ApiFootballSettingsPage() {
               </Button>
             </div>
           ) : (
-            <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
-              {leagues?.map((league) => (
-                <div
-                  key={league.id}
-                  className="flex items-center gap-3 p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
-                >
-                  <Checkbox
-                    checked={league.is_synced}
-                    onCheckedChange={(checked) => {
-                      toggleLeagueSyncMutation.mutate({
-                        id: league.id,
-                        isSynced: !!checked,
-                      });
-                    }}
-                  />
-                  {league.logo_url && (
-                    <img
-                      src={league.logo_url}
-                      alt={league.name}
-                      className="h-8 w-8 object-contain"
+            <>
+              {/* Search and filter */}
+              <div className="mb-4 relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder={t("apiFootball.searchLeagues")}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+              <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
+                {leagues
+                  ?.filter((league) => {
+                    if (!searchQuery) return true;
+                    const query = searchQuery.toLowerCase();
+                    return (
+                      league.name.toLowerCase().includes(query) ||
+                      league.country?.toLowerCase().includes(query)
+                    );
+                  })
+                  .map((league) => (
+                    <LeagueCard
+                      key={league.id}
+                      league={league}
+                      onToggleSync={(id, isSynced) => {
+                        toggleLeagueSyncMutation.mutate({ id, isSynced });
+                      }}
+                      onClick={(l) => {
+                        setSelectedLeague(l);
+                        setDetailPanelOpen(true);
+                      }}
+                      disabled={toggleLeagueSyncMutation.isPending}
                     />
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium truncate">{league.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {league.country} • {league.season}
-                    </p>
-                  </div>
-                  {league.is_synced ? (
-                    <CheckCircle2 className="h-4 w-4 text-primary" />
-                  ) : (
-                    <XCircle className="h-4 w-4 text-muted-foreground" />
-                  )}
-                </div>
-              ))}
-            </div>
+                  ))}
+              </div>
+            </>
           )}
         </CardContent>
       </Card>
@@ -659,6 +665,13 @@ export default function ApiFootballSettingsPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* League Detail Panel */}
+      <LeagueDetailPanel
+        league={selectedLeague}
+        open={detailPanelOpen}
+        onOpenChange={setDetailPanelOpen}
+      />
     </div>
   );
 }
