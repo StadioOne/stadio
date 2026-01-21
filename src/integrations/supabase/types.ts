@@ -393,75 +393,175 @@ export type Database = {
           api_description: string | null
           api_image_url: string | null
           api_title: string | null
+          away_score: number | null
           away_team: string | null
+          away_team_id: string | null
           blocked_countries: string[] | null
           created_at: string
           created_by: string | null
           event_date: string
           external_id: string | null
+          home_score: number | null
           home_team: string | null
+          home_team_id: string | null
           id: string
           is_live: boolean | null
           is_pinned: boolean | null
+          last_sync_at: string | null
           league: string | null
+          league_id: string | null
+          match_status: string | null
           override_description: string | null
           override_image_url: string | null
           override_title: string | null
           published_at: string | null
+          round: string | null
+          season: number | null
           sport: string
           status: Database["public"]["Enums"]["content_status"]
           updated_at: string
           updated_by: string | null
+          venue: string | null
         }
         Insert: {
           allowed_countries?: string[] | null
           api_description?: string | null
           api_image_url?: string | null
           api_title?: string | null
+          away_score?: number | null
           away_team?: string | null
+          away_team_id?: string | null
           blocked_countries?: string[] | null
           created_at?: string
           created_by?: string | null
           event_date: string
           external_id?: string | null
+          home_score?: number | null
           home_team?: string | null
+          home_team_id?: string | null
           id?: string
           is_live?: boolean | null
           is_pinned?: boolean | null
+          last_sync_at?: string | null
           league?: string | null
+          league_id?: string | null
+          match_status?: string | null
           override_description?: string | null
           override_image_url?: string | null
           override_title?: string | null
           published_at?: string | null
+          round?: string | null
+          season?: number | null
           sport: string
           status?: Database["public"]["Enums"]["content_status"]
           updated_at?: string
           updated_by?: string | null
+          venue?: string | null
         }
         Update: {
           allowed_countries?: string[] | null
           api_description?: string | null
           api_image_url?: string | null
           api_title?: string | null
+          away_score?: number | null
           away_team?: string | null
+          away_team_id?: string | null
           blocked_countries?: string[] | null
           created_at?: string
           created_by?: string | null
           event_date?: string
           external_id?: string | null
+          home_score?: number | null
           home_team?: string | null
+          home_team_id?: string | null
           id?: string
           is_live?: boolean | null
           is_pinned?: boolean | null
+          last_sync_at?: string | null
           league?: string | null
+          league_id?: string | null
+          match_status?: string | null
           override_description?: string | null
           override_image_url?: string | null
           override_title?: string | null
           published_at?: string | null
+          round?: string | null
+          season?: number | null
           sport?: string
           status?: Database["public"]["Enums"]["content_status"]
           updated_at?: string
           updated_by?: string | null
+          venue?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "events_away_team_id_fkey"
+            columns: ["away_team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "events_home_team_id_fkey"
+            columns: ["home_team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "events_league_id_fkey"
+            columns: ["league_id"]
+            isOneToOne: false
+            referencedRelation: "leagues"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      leagues: {
+        Row: {
+          country: string | null
+          country_code: string | null
+          created_at: string
+          external_id: string
+          id: string
+          is_active: boolean | null
+          is_synced: boolean | null
+          logo_url: string | null
+          name: string
+          name_fr: string | null
+          season: number | null
+          type: string | null
+          updated_at: string
+        }
+        Insert: {
+          country?: string | null
+          country_code?: string | null
+          created_at?: string
+          external_id: string
+          id?: string
+          is_active?: boolean | null
+          is_synced?: boolean | null
+          logo_url?: string | null
+          name: string
+          name_fr?: string | null
+          season?: number | null
+          type?: string | null
+          updated_at?: string
+        }
+        Update: {
+          country?: string | null
+          country_code?: string | null
+          created_at?: string
+          external_id?: string
+          id?: string
+          is_active?: boolean | null
+          is_synced?: boolean | null
+          logo_url?: string | null
+          name?: string
+          name_fr?: string | null
+          season?: number | null
+          type?: string | null
+          updated_at?: string
         }
         Relationships: []
       }
@@ -629,6 +729,48 @@ export type Database = {
           key?: string
           request_count?: number
           window_start?: string
+        }
+        Relationships: []
+      }
+      teams: {
+        Row: {
+          country: string | null
+          created_at: string
+          external_id: string
+          id: string
+          is_active: boolean | null
+          logo_url: string | null
+          name: string
+          name_short: string | null
+          updated_at: string
+          venue_city: string | null
+          venue_name: string | null
+        }
+        Insert: {
+          country?: string | null
+          created_at?: string
+          external_id: string
+          id?: string
+          is_active?: boolean | null
+          logo_url?: string | null
+          name: string
+          name_short?: string | null
+          updated_at?: string
+          venue_city?: string | null
+          venue_name?: string | null
+        }
+        Update: {
+          country?: string | null
+          created_at?: string
+          external_id?: string
+          id?: string
+          is_active?: boolean | null
+          logo_url?: string | null
+          name?: string
+          name_short?: string | null
+          updated_at?: string
+          venue_city?: string | null
+          venue_name?: string | null
         }
         Relationships: []
       }
