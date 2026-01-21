@@ -133,8 +133,8 @@ export interface FixtureStats {
   views: number;
   purchases: number;
   revenue: number;
-  pricingTier?: string | null;
-  topCountries: string[];
+  pricingTier?: PricingTier | null;
+  topCountries: { country: string; revenue: number }[];
 }
 
 export interface ContentStats {
@@ -143,7 +143,7 @@ export interface ContentStats {
   type: string;
   views: number;
   likes: number;
-  topCountries: string[];
+  topCountries: { country: string; views: number }[];
 }
 
 export interface AnalyticsFilters {

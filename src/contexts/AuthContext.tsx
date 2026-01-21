@@ -10,6 +10,7 @@ interface AuthContextType {
   role: AdminRole | null;
   isLoading: boolean;
   isAdmin: boolean;
+  canSeeRevenue: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signUp: (email: string, password: string, fullName?: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
@@ -139,6 +140,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const isAdmin = role !== null;
+  const canSeeRevenue = role === "owner" || role === "admin";
 
   return (
     <AuthContext.Provider
@@ -148,6 +150,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         role,
         isLoading,
         isAdmin,
+        canSeeRevenue,
         signIn,
         signUp,
         signOut,

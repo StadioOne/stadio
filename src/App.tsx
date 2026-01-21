@@ -17,6 +17,8 @@ import UsersPage from "@/pages/UsersPage";
 import AuditLogPage from "@/pages/AuditLogPage";
 import WorkflowsPage from "@/pages/WorkflowsPage";
 import AnalyticsPage from "@/pages/AnalyticsPage";
+import AnalyticsFixturesPage from "@/pages/AnalyticsFixturesPage";
+import AnalyticsOriginalsPage from "@/pages/AnalyticsOriginalsPage";
 import NotFound from "@/pages/NotFound";
 import "@/lib/i18n";
 
@@ -73,6 +75,8 @@ function AppRoutes() {
         <Route path="/audit" element={<AuditLogPage />} />
         <Route path="/workflows" element={<WorkflowsPage />} />
         <Route path="/analytics" element={<AnalyticsPage />} />
+        <Route path="/analytics/fixtures" element={<AnalyticsFixturesPage />} />
+        <Route path="/analytics/originals" element={<AnalyticsOriginalsPage />} />
       </Route>
 
       <Route path="*" element={<NotFound />} />
