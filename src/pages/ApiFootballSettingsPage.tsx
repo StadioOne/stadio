@@ -20,7 +20,10 @@ import {
   Clock,
   Loader2,
   Settings2,
-  Database
+  Database,
+  Wifi,
+  WifiOff,
+  AlertTriangle
 } from "lucide-react";
 import { format, addDays } from "date-fns";
 import { fr } from "date-fns/locale";
@@ -38,6 +41,25 @@ interface League {
   is_active: boolean;
   is_synced: boolean;
   updated_at: string;
+}
+
+interface ApiStatus {
+  connected: boolean;
+  error?: string;
+  account?: {
+    firstname?: string;
+    lastname?: string;
+    email?: string;
+  };
+  subscription?: {
+    plan?: string;
+    end?: string;
+    active?: boolean;
+  };
+  requests?: {
+    current?: number;
+    limit_day?: number;
+  };
 }
 
 interface SyncResult {
@@ -96,6 +118,38 @@ export default function ApiFootballSettingsPage() {
   const [dateFrom, setDateFrom] = useState(format(new Date(), "yyyy-MM-dd"));
   const [dateTo, setDateTo] = useState(format(addDays(new Date(), 14), "yyyy-MM-dd"));
   const [selectedLeagueIds, setSelectedLeagueIds] = useState<number[]>([]);
+
+  // Check API status on mount
+  const { data: apiStatus, isLoading: statusLoading, refetch: refetchStatus } = useQuery({
+    queryKey: ["api-football-status"],
+    queryFn: async (): Promise<ApiStatus> => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        return { connected: false, error: "Non authentifié" };
+      }
+
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-api-football-sync`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ action: "check_status" }),
+        }
+      );
+
+      const result = await response.json();
+      if (!response.ok) {
+        return { connected: false, error: result.error || "Erreur de vérification" };
+      }
+
+      return result.data as ApiStatus;
+    },
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    retry: 1,
+  });
 
   // Fetch existing synced leagues
   const { data: leagues, isLoading: leaguesLoading } = useQuery({
@@ -214,6 +268,8 @@ export default function ApiFootballSettingsPage() {
     syncAllMutation.isPending;
 
   const syncedLeaguesCount = leagues?.filter((l) => l.is_synced).length || 0;
+  const isApiConnected = apiStatus?.connected === true;
+  const canSync = isApiConnected && !isSyncing;
 
   return (
     <div className="space-y-6">
@@ -224,6 +280,73 @@ export default function ApiFootballSettingsPage() {
           {t("apiFootball.description")}
         </p>
       </div>
+
+      {/* API Status Card */}
+      <Card className={!isApiConnected && !statusLoading ? "border-destructive" : ""}>
+        <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <div className="flex items-center gap-2">
+            {statusLoading ? (
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            ) : isApiConnected ? (
+              <Wifi className="h-5 w-5 text-primary" />
+            ) : (
+              <WifiOff className="h-5 w-5 text-destructive" />
+            )}
+            <CardTitle className="text-base">
+              {t("apiFootball.apiStatus")}
+            </CardTitle>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => refetchStatus()}
+            disabled={statusLoading}
+          >
+            <RefreshCw className={`h-4 w-4 ${statusLoading ? "animate-spin" : ""}`} />
+          </Button>
+        </CardHeader>
+        <CardContent>
+          {statusLoading ? (
+            <p className="text-sm text-muted-foreground">
+              {t("apiFootball.checkingConnection")}
+            </p>
+          ) : isApiConnected ? (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-primary" />
+                <span className="text-sm font-medium text-primary">
+                  {t("apiFootball.connected")}
+                </span>
+                {apiStatus?.subscription?.plan && (
+                  <Badge variant="secondary" className="ml-2">
+                    {apiStatus.subscription.plan}
+                  </Badge>
+                )}
+              </div>
+              {apiStatus?.requests && (
+                <p className="text-xs text-muted-foreground">
+                  {t("apiFootball.requestsUsed", {
+                    current: apiStatus.requests.current || 0,
+                    limit: apiStatus.requests.limit_day || 0,
+                  })}
+                </p>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-destructive" />
+                <span className="text-sm font-medium text-destructive">
+                  {t("apiFootball.disconnected")}
+                </span>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                {apiStatus?.error || t("apiFootball.connectionError")}
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-4">
@@ -362,12 +485,20 @@ export default function ApiFootballSettingsPage() {
             </div>
           </div>
 
+          {/* API Disabled Warning */}
+          {!isApiConnected && !statusLoading && (
+            <div className="flex items-center gap-2 p-3 rounded-md bg-destructive/10 text-destructive text-sm">
+              <AlertTriangle className="h-4 w-4" />
+              {t("apiFootball.apiDisabledHint")}
+            </div>
+          )}
+
           {/* Sync Buttons */}
           <div className="flex flex-wrap gap-3">
             <Button
               variant="outline"
               onClick={() => syncLeaguesMutation.mutate()}
-              disabled={isSyncing}
+              disabled={!canSync}
             >
               {syncLeaguesMutation.isPending && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -379,7 +510,7 @@ export default function ApiFootballSettingsPage() {
             <Button
               variant="outline"
               onClick={() => syncTeamsMutation.mutate()}
-              disabled={isSyncing}
+              disabled={!canSync}
             >
               {syncTeamsMutation.isPending && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -391,7 +522,7 @@ export default function ApiFootballSettingsPage() {
             <Button
               variant="outline"
               onClick={() => syncFixturesMutation.mutate()}
-              disabled={isSyncing}
+              disabled={!canSync}
             >
               {syncFixturesMutation.isPending && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -402,7 +533,7 @@ export default function ApiFootballSettingsPage() {
 
             <Button
               onClick={() => syncAllMutation.mutate()}
-              disabled={isSyncing}
+              disabled={!canSync}
             >
               {syncAllMutation.isPending && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -475,7 +606,7 @@ export default function ApiFootballSettingsPage() {
                     </p>
                   </div>
                   {league.is_synced ? (
-                    <CheckCircle2 className="h-4 w-4 text-green-500" />
+                    <CheckCircle2 className="h-4 w-4 text-primary" />
                   ) : (
                     <XCircle className="h-4 w-4 text-muted-foreground" />
                   )}
@@ -504,7 +635,7 @@ export default function ApiFootballSettingsPage() {
                 >
                   <div className="flex items-center gap-3">
                     {run.status === "success" ? (
-                      <CheckCircle2 className="h-5 w-5 text-green-500" />
+                      <CheckCircle2 className="h-5 w-5 text-primary" />
                     ) : run.status === "failed" ? (
                       <XCircle className="h-5 w-5 text-destructive" />
                     ) : (
