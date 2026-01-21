@@ -96,6 +96,19 @@ export interface PaginatedResult<T> {
 
 // Author types
 export type Author = Database['public']['Tables']['authors']['Row'];
+export type AuthorInsert = Database['public']['Tables']['authors']['Insert'];
+export type AuthorUpdate = Database['public']['Tables']['authors']['Update'];
+
+export interface AuthorsFilters {
+  isActive?: boolean | 'all';
+  search?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface AuthorWithStats extends Author {
+  contentsCount: number;
+}
 
 // Profile types
 export type Profile = Database['public']['Tables']['profiles']['Row'];

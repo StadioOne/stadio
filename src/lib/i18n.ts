@@ -6,6 +6,7 @@ const fr = {
   common: {
     loading: "Chargement...",
     save: "Enregistrer",
+    saving: "Enregistrement...",
     cancel: "Annuler",
     delete: "Supprimer",
     edit: "Modifier",
@@ -40,6 +41,13 @@ const fr = {
     noData: "Aucune donnée",
     errorOccurred: "Une erreur s'est produite",
     successMessage: "Opération réussie",
+    error: "Une erreur s'est produite",
+    retry: "Réessayer",
+    more: "de plus",
+    clearFilters: "Effacer les filtres",
+    activate: "Activer",
+    deactivate: "Désactiver",
+    pageOf: "Page {{current}} sur {{total}}",
   },
   auth: {
     login: "Connexion",
@@ -227,14 +235,74 @@ const fr = {
     },
   authors: {
     title: "Auteurs",
-    subtitle: "Gestion des auteurs",
+    subtitle: "Gestion des auteurs et contributeurs",
+    pageDescription: "Gérez les profils des auteurs de contenu",
     newAuthor: "Nouvel auteur",
+    
+    // Champs
     name: "Nom",
-    bio: "Biographie",
+    namePlaceholder: "Nom de l'auteur",
+    bioFr: "Biographie (FR)",
+    bioEn: "Biographie (EN)",
+    bioPlaceholder: "Présentez cet auteur...",
+    bioPlaceholderEn: "Introduce this author...",
     avatar: "Avatar",
-    social: "Réseaux sociaux",
+    avatarUrl: "URL de l'avatar",
+    avatarPlaceholder: "https://example.com/avatar.jpg",
+    noBio: "Aucune biographie",
+    
+    // Réseaux
+    socialNetworks: "Réseaux sociaux",
+    twitter: "Twitter / X",
+    twitterPlaceholder: "@username ou URL",
+    linkedin: "LinkedIn",
+    linkedinPlaceholder: "URL du profil LinkedIn",
+    
+    // Statuts
     active: "Actif",
     inactive: "Inactif",
+    allStatus: "Tous les statuts",
+    activeOnly: "Actifs uniquement",
+    inactiveOnly: "Inactifs uniquement",
+    
+    // Stats
+    stats: {
+      total: "Total auteurs",
+      active: "Actifs",
+      inactive: "Inactifs",
+      contents: "Contenus",
+    },
+    
+    // Contenus
+    contentsCount: "{{count}} contenu(s)",
+    noContents: "Aucun contenu",
+    viewContents: "Voir les contenus",
+    
+    // Filtres
+    searchPlaceholder: "Rechercher un auteur...",
+    
+    // États vides
+    emptyTitle: "Aucun auteur",
+    emptyDescription: "Créez votre premier auteur pour commencer à attribuer du contenu.",
+    noResults: "Aucun résultat",
+    noResultsDescription: "Aucun auteur ne correspond à vos critères.",
+    
+    // Actions
+    createSuccess: "Auteur créé avec succès",
+    updateSuccess: "Auteur mis à jour",
+    deleteSuccess: "Auteur supprimé",
+    deleteConfirm: "Supprimer cet auteur ?",
+    deleteWarning: "Cette action est irréversible.",
+    cannotDelete: "Impossible de supprimer un auteur avec des contenus associés",
+    activateSuccess: "Auteur activé",
+    deactivateSuccess: "Auteur désactivé",
+    
+    // Panel
+    editAuthor: "Modifier l'auteur",
+    createAuthor: "Créer un auteur",
+    identity: "Identité",
+    biography: "Biographie",
+    associatedContents: "Contenus associés",
   },
   users: {
     title: "Utilisateurs & Rôles",
@@ -297,6 +365,7 @@ const en = {
   common: {
     loading: "Loading...",
     save: "Save",
+    saving: "Saving...",
     cancel: "Cancel",
     delete: "Delete",
     edit: "Edit",
@@ -331,6 +400,13 @@ const en = {
     noData: "No data",
     errorOccurred: "An error occurred",
     successMessage: "Operation successful",
+    error: "An error occurred",
+    retry: "Retry",
+    more: "more",
+    clearFilters: "Clear filters",
+    activate: "Activate",
+    deactivate: "Deactivate",
+    pageOf: "Page {{current}} of {{total}}",
   },
   auth: {
     login: "Login",
@@ -453,14 +529,74 @@ const en = {
   },
   authors: {
     title: "Authors",
-    subtitle: "Author management",
+    subtitle: "Author and contributor management",
+    pageDescription: "Manage content author profiles",
     newAuthor: "New author",
+    
+    // Fields
     name: "Name",
-    bio: "Biography",
+    namePlaceholder: "Author name",
+    bioFr: "Biography (FR)",
+    bioEn: "Biography (EN)",
+    bioPlaceholder: "Introduce this author...",
+    bioPlaceholderEn: "Introduce this author...",
     avatar: "Avatar",
-    social: "Social networks",
+    avatarUrl: "Avatar URL",
+    avatarPlaceholder: "https://example.com/avatar.jpg",
+    noBio: "No biography",
+    
+    // Social
+    socialNetworks: "Social networks",
+    twitter: "Twitter / X",
+    twitterPlaceholder: "@username or URL",
+    linkedin: "LinkedIn",
+    linkedinPlaceholder: "LinkedIn profile URL",
+    
+    // Status
     active: "Active",
     inactive: "Inactive",
+    allStatus: "All statuses",
+    activeOnly: "Active only",
+    inactiveOnly: "Inactive only",
+    
+    // Stats
+    stats: {
+      total: "Total authors",
+      active: "Active",
+      inactive: "Inactive",
+      contents: "Contents",
+    },
+    
+    // Contents
+    contentsCount: "{{count}} content(s)",
+    noContents: "No content",
+    viewContents: "View contents",
+    
+    // Filters
+    searchPlaceholder: "Search for an author...",
+    
+    // Empty states
+    emptyTitle: "No authors",
+    emptyDescription: "Create your first author to start assigning content.",
+    noResults: "No results",
+    noResultsDescription: "No author matches your criteria.",
+    
+    // Actions
+    createSuccess: "Author created successfully",
+    updateSuccess: "Author updated",
+    deleteSuccess: "Author deleted",
+    deleteConfirm: "Delete this author?",
+    deleteWarning: "This action is irreversible.",
+    cannotDelete: "Cannot delete an author with associated content",
+    activateSuccess: "Author activated",
+    deactivateSuccess: "Author deactivated",
+    
+    // Panel
+    editAuthor: "Edit author",
+    createAuthor: "Create author",
+    identity: "Identity",
+    biography: "Biography",
+    associatedContents: "Associated contents",
   },
   users: {
     title: "Users & Roles",
