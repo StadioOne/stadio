@@ -6,7 +6,7 @@ import { successResponse, errorResponse } from "../_shared/response.ts";
 const API_FOOTBALL_BASE_URL = "https://v3.football.api-sports.io";
 
 interface SyncRequest {
-  action: "sync_leagues" | "sync_fixtures" | "sync_teams" | "sync_all";
+  action: "sync_leagues" | "sync_fixtures" | "sync_teams" | "sync_all" | "check_status";
   leagueIds?: number[];
   dateFrom?: string;
   dateTo?: string;
@@ -445,6 +445,69 @@ Deno.serve(async (req) => {
     let result: Record<string, unknown> = {};
 
     switch (action) {
+      case "check_status": {
+        // Lightweight check: fetch account status from API-Football
+        const apiKey = Deno.env.get("API_FOOTBALL_KEY");
+        if (!apiKey) {
+          return successResponse({
+            action: "check_status",
+            connected: false,
+            error: "API_FOOTBALL_KEY non configurée",
+          });
+        }
+
+        try {
+          const response = await fetch(`${API_FOOTBALL_BASE_URL}/status`, {
+            headers: {
+              "x-rapidapi-key": apiKey,
+              "x-rapidapi-host": "v3.football.api-sports.io",
+            },
+          });
+
+          const data = await response.json();
+          
+          if (data.errors && Object.keys(data.errors).length > 0) {
+            const errorMsg = typeof data.errors === 'object' 
+              ? Object.values(data.errors).join(', ')
+              : JSON.stringify(data.errors);
+            return successResponse({
+              action: "check_status",
+              connected: false,
+              error: errorMsg,
+            });
+          }
+
+          const account = data.response?.account || {};
+          const subscription = data.response?.subscription || {};
+          const requests = data.response?.requests || {};
+
+          return successResponse({
+            action: "check_status",
+            connected: true,
+            account: {
+              firstname: account.firstname,
+              lastname: account.lastname,
+              email: account.email,
+            },
+            subscription: {
+              plan: subscription.plan,
+              end: subscription.end,
+              active: subscription.active,
+            },
+            requests: {
+              current: requests.current,
+              limit_day: requests.limit_day,
+            },
+          });
+        } catch (err) {
+          return successResponse({
+            action: "check_status",
+            connected: false,
+            error: err instanceof Error ? err.message : "Erreur de connexion",
+          });
+        }
+      }
+
       case "sync_leagues": {
         const leaguesResult = await syncLeagues(supabase, leagueIds);
         result = {
