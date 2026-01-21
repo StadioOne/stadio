@@ -24,14 +24,23 @@ export async function authenticateAdmin(
     return { error: 'Missing or invalid authorization header', status: 401 };
   }
 
+  const token = authHeader.replace('Bearer ', '');
+
+  // Create client with the user's token for RPC calls
   const supabase = createClient(
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_ANON_KEY')!,
     { global: { headers: { Authorization: authHeader } } }
   );
 
-  // Get the user from the token
-  const { data: userData, error: userError } = await supabase.auth.getUser();
+  // Create admin client to verify the token
+  const adminClient = createClient(
+    Deno.env.get('SUPABASE_URL')!,
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+  );
+
+  // Use admin client to get user from token (bypasses session check)
+  const { data: userData, error: userError } = await adminClient.auth.getUser(token);
   
   if (userError || !userData?.user) {
     return { error: 'Invalid or expired token', status: 401 };
