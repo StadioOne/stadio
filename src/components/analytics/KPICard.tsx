@@ -1,20 +1,19 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { TrendBadge } from './TrendBadge';
 
 interface KPICardProps {
   title: string;
   value: string | number;
   subtitle?: string;
   icon: LucideIcon;
-  trend?: {
-    value: number;
-    isPositive: boolean;
-  };
+  trend?: number; // percentage change
   className?: string;
+  isLoading?: boolean;
 }
 
-export function KPICard({ title, value, subtitle, icon: Icon, trend, className }: KPICardProps) {
+export function KPICard({ title, value, subtitle, icon: Icon, trend, className, isLoading }: KPICardProps) {
   return (
     <Card className={cn('relative overflow-hidden', className)}>
       <CardContent className="p-6">
@@ -25,13 +24,8 @@ export function KPICard({ title, value, subtitle, icon: Icon, trend, className }
             {subtitle && (
               <p className="text-xs text-muted-foreground">{subtitle}</p>
             )}
-            {trend && (
-              <p className={cn(
-                'text-xs font-medium',
-                trend.isPositive ? 'text-green-600' : 'text-red-600'
-              )}>
-                {trend.isPositive ? '+' : ''}{trend.value}%
-              </p>
+            {trend !== undefined && !isNaN(trend) && isFinite(trend) && (
+              <TrendBadge value={trend} />
             )}
           </div>
           <div className="rounded-lg bg-primary/10 p-3">

@@ -60,4 +60,19 @@ export function getPeriodDates(period: PeriodOption): { dateFrom: string; dateTo
   };
 }
 
+export function getPreviousPeriodDates(period: PeriodOption): { dateFrom: string; dateTo: string } {
+  const days = period === '7d' ? 7 : period === '30d' ? 30 : 90;
+  
+  const dateTo = new Date();
+  dateTo.setDate(dateTo.getDate() - days); // End of previous period = start of current
+  
+  const dateFrom = new Date(dateTo);
+  dateFrom.setDate(dateFrom.getDate() - days); // Go back same number of days
+
+  return {
+    dateFrom: dateFrom.toISOString().split('T')[0],
+    dateTo: dateTo.toISOString().split('T')[0],
+  };
+}
+
 export type { PeriodOption };

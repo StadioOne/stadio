@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { BarChart3, DollarSign, Eye, ShoppingCart, Heart } from 'lucide-react';
 import { KPICard } from '@/components/analytics/KPICard';
 import { CountryTable } from '@/components/analytics/CountryTable';
-import { PeriodSelector, getPeriodDates, type PeriodOption } from '@/components/analytics/PeriodSelector';
+import { PeriodSelector, getPeriodDates, getPreviousPeriodDates, type PeriodOption } from '@/components/analytics/PeriodSelector';
 import { useAnalyticsOverview, useAnalyticsGeo } from '@/hooks/useAnalytics';
 import {
   Table,
@@ -16,13 +16,38 @@ import {
   TableRow,
 } from '@/components/ui/table';
 
+// Calculate percentage change between two values
+function calculateTrend(current: number | null | undefined, previous: number | null | undefined): number | undefined {
+  if (current === null || current === undefined) return undefined;
+  if (previous === null || previous === undefined || previous === 0) {
+    return current > 0 ? 100 : 0;
+  }
+  return ((current - previous) / previous) * 100;
+}
+
 export default function AnalyticsPage() {
   const { t } = useTranslation();
   const [period, setPeriod] = useState<PeriodOption>('30d');
+  
+  // Current period dates
   const { dateFrom, dateTo } = getPeriodDates(period);
+  // Previous period dates for comparison
+  const { dateFrom: prevDateFrom, dateTo: prevDateTo } = getPreviousPeriodDates(period);
 
+  // Fetch current and previous period data
   const { data: overview, isLoading: overviewLoading } = useAnalyticsOverview(dateFrom, dateTo);
+  const { data: prevOverview, isLoading: prevOverviewLoading } = useAnalyticsOverview(prevDateFrom, prevDateTo);
   const { data: geo, isLoading: geoLoading } = useAnalyticsGeo(dateFrom, dateTo);
+
+  const isLoading = overviewLoading || prevOverviewLoading;
+
+  // Calculate trends
+  const trends = useMemo(() => ({
+    revenue: calculateTrend(overview?.totalRevenue, prevOverview?.totalRevenue),
+    purchases: calculateTrend(overview?.totalPurchases, prevOverview?.totalPurchases),
+    views: calculateTrend(overview?.totalViews, prevOverview?.totalViews),
+    likes: calculateTrend(overview?.totalLikes, prevOverview?.totalLikes),
+  }), [overview, prevOverview]);
 
   const formatCurrency = (value: number | null) => {
     if (value === null) return '—';
@@ -37,16 +62,23 @@ export default function AnalyticsPage() {
     return new Intl.NumberFormat('fr-FR').format(value);
   };
 
+  const periodLabel = period === '7d' ? '7 jours' : period === '30d' ? '30 jours' : '90 jours';
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">{t('nav.analytics')}</h1>
+        <div>
+          <h1 className="text-3xl font-bold">{t('nav.analytics')}</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Comparaison avec les {periodLabel} précédents
+          </p>
+        </div>
         <PeriodSelector selected={period} onSelect={setPeriod} />
       </div>
 
       {/* KPI Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {overviewLoading ? (
+        {isLoading ? (
           <>
             <Skeleton className="h-32" />
             <Skeleton className="h-32" />
@@ -59,21 +91,25 @@ export default function AnalyticsPage() {
               title="Chiffre d'affaires"
               value={formatCurrency(overview?.totalRevenue ?? null)}
               icon={DollarSign}
+              trend={trends.revenue}
             />
             <KPICard
               title="Ventes PPV"
               value={formatNumber(overview?.totalPurchases ?? 0)}
               icon={ShoppingCart}
+              trend={trends.purchases}
             />
             <KPICard
               title="Vues totales"
               value={formatNumber(overview?.totalViews ?? 0)}
               icon={Eye}
+              trend={trends.views}
             />
             <KPICard
               title="Likes"
               value={formatNumber(overview?.totalLikes ?? 0)}
               icon={Heart}
+              trend={trends.likes}
             />
           </>
         )}
