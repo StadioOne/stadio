@@ -12,6 +12,9 @@ import {
   Workflow,
   BarChart3,
   PenTool,
+  ChevronDown,
+  Eye,
+  Tv,
 } from "lucide-react";
 import {
   Sidebar,
@@ -22,9 +25,17 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubItem,
+  SidebarMenuSubButton,
   SidebarHeader,
   SidebarFooter,
 } from "@/components/ui/sidebar";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 
 const mainNavItems = [
   { key: "dashboard", path: "/", icon: LayoutDashboard },
@@ -42,7 +53,12 @@ const adminNavItems = [
   { key: "users", path: "/users", icon: Users },
   { key: "auditLog", path: "/audit", icon: ClipboardList },
   { key: "workflows", path: "/workflows", icon: Workflow },
-  { key: "analytics", path: "/analytics", icon: BarChart3 },
+];
+
+const analyticsSubItems = [
+  { key: "overview", path: "/analytics", label: "Vue d'ensemble", icon: BarChart3 },
+  { key: "fixtures", path: "/analytics/fixtures", label: "Événements", icon: Calendar },
+  { key: "originals", path: "/analytics/originals", label: "Originals", icon: Tv },
 ];
 
 export function AdminSidebar() {
@@ -51,8 +67,10 @@ export function AdminSidebar() {
 
   const isActive = (path: string) => {
     if (path === "/") return location.pathname === "/";
-    return location.pathname.startsWith(path);
+    return location.pathname === path || location.pathname.startsWith(path + "/");
   };
+
+  const isAnalyticsActive = location.pathname.startsWith("/analytics");
 
   const renderNavItems = (items: typeof mainNavItems) => (
     <SidebarMenu>
@@ -93,7 +111,38 @@ export function AdminSidebar() {
 
         <SidebarGroup>
           <SidebarGroupLabel>Administration</SidebarGroupLabel>
-          <SidebarGroupContent>{renderNavItems(adminNavItems)}</SidebarGroupContent>
+          <SidebarGroupContent>
+            {renderNavItems(adminNavItems)}
+            
+            {/* Analytics with sub-navigation */}
+            <SidebarMenu>
+              <Collapsible defaultOpen={isAnalyticsActive} className="group/collapsible">
+                <SidebarMenuItem>
+                  <CollapsibleTrigger asChild>
+                    <SidebarMenuButton isActive={isAnalyticsActive}>
+                      <BarChart3 className="h-4 w-4" />
+                      <span>{t('nav.analytics')}</span>
+                      <ChevronDown className="ml-auto h-4 w-4 transition-transform group-data-[state=open]/collapsible:rotate-180" />
+                    </SidebarMenuButton>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <SidebarMenuSub>
+                      {analyticsSubItems.map((item) => (
+                        <SidebarMenuSubItem key={item.key}>
+                          <SidebarMenuSubButton asChild isActive={location.pathname === item.path}>
+                            <Link to={item.path}>
+                              <item.icon className="h-3.5 w-3.5" />
+                              <span>{item.label}</span>
+                            </Link>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      ))}
+                    </SidebarMenuSub>
+                  </CollapsibleContent>
+                </SidebarMenuItem>
+              </Collapsible>
+            </SidebarMenu>
+          </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
 
