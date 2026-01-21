@@ -26,3 +26,12 @@ verify_jwt = false
 
 [functions.admin-audit-log]
 verify_jwt = false
+
+[functions.admin-analytics-aggregate]
+verify_jwt = false
+
+[functions.admin-analytics-cleanup]
+verify_jwt = false
+
+[functions.public-analytics-ingest]
+verify_jwt = false

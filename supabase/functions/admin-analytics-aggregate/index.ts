@@ -1,7 +1,11 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
 import { corsHeaders } from '../_shared/cors.ts';
 import { authenticateAdmin, isAuthError } from '../_shared/auth.ts';
-import { successResponse, errorResponse } from '../_shared/response.ts';
+import { 
+  successResponseWithMeta, 
+  errorResponse, 
+  generateRequestId 
+} from '../_shared/response.ts';
 import { logAudit, getRequestMetadata } from '../_shared/audit.ts';
 
 interface AggregationResult {
@@ -13,15 +17,23 @@ interface AggregationResult {
 }
 
 Deno.serve(async (req) => {
+  const requestId = generateRequestId();
+  console.log(`[${requestId}] Analytics aggregation started`);
+
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
+  }
+
+  if (req.method !== 'POST') {
+    return errorResponse('Method not allowed', 405, 'INVALID_PAYLOAD', requestId);
   }
 
   try {
     // Authenticate - only owner/admin can trigger aggregation
     const authResult = await authenticateAdmin(req, ['owner', 'admin']);
     if (isAuthError(authResult)) {
-      return errorResponse(authResult.error, authResult.status);
+      console.log(`[${requestId}] Auth failed: ${authResult.error}`);
+      return errorResponse(authResult.error, authResult.status, 'FORBIDDEN', requestId);
     }
 
     const { userId, userEmail, role } = authResult;
@@ -36,29 +48,29 @@ Deno.serve(async (req) => {
       targetDate = getYesterdayDate();
     }
 
-    console.log(`Starting analytics aggregation for date: ${targetDate}`);
+    console.log(`[${requestId}] User ${userEmail} (${role}) starting aggregation for date: ${targetDate}`);
 
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     );
 
-    // Fetch raw events for the target date
+    // Fetch raw events for the target date using occurred_at
     const startOfDay = `${targetDate}T00:00:00.000Z`;
     const endOfDay = `${targetDate}T23:59:59.999Z`;
 
     const { data: rawEvents, error: eventsError } = await supabaseAdmin
       .from('analytics_events')
       .select('event_type, fixture_id, content_id, country, metadata')
-      .gte('created_at', startOfDay)
-      .lte('created_at', endOfDay);
+      .gte('occurred_at', startOfDay)
+      .lte('occurred_at', endOfDay);
 
     if (eventsError) {
-      console.error('Error fetching raw events:', eventsError);
-      return errorResponse('Failed to fetch raw events', 500);
+      console.error(`[${requestId}] Error fetching raw events:`, eventsError);
+      return errorResponse('Failed to fetch raw events', 500, 'INTERNAL_ERROR', requestId);
     }
 
-    console.log(`Found ${rawEvents?.length || 0} raw events for ${targetDate}`);
+    console.log(`[${requestId}] Found ${rawEvents?.length || 0} raw events for ${targetDate}`);
 
     // Aggregate events
     type AggKey = string;
@@ -107,7 +119,7 @@ Deno.serve(async (req) => {
       aggregates.set(key, existing);
     }
 
-    console.log(`Aggregated into ${aggregates.size} unique combinations`);
+    console.log(`[${requestId}] Aggregated into ${aggregates.size} unique combinations`);
 
     // Upsert into analytics_daily
     let rowsUpserted = 0;
@@ -137,7 +149,7 @@ Deno.serve(async (req) => {
         );
 
       if (upsertError) {
-        console.error(`Error upserting aggregate for ${key}:`, upsertError);
+        console.error(`[${requestId}] Error upserting aggregate for ${key}:`, upsertError);
         continue;
       }
 
@@ -169,16 +181,17 @@ Deno.serve(async (req) => {
       entity: 'analytics_daily',
       entityId: undefined,
       after: result as unknown as Record<string, unknown>,
+      metadata: { request_id: requestId },
       ipAddress,
       userAgent,
     });
 
-    console.log(`Aggregation complete: ${rowsUpserted} rows in ${durationMs}ms`);
+    console.log(`[${requestId}] Aggregation complete: ${rowsUpserted} rows in ${durationMs}ms`);
 
-    return successResponse(result);
+    return successResponseWithMeta(result, undefined, requestId);
   } catch (error) {
-    console.error('Analytics aggregation error:', error);
-    return errorResponse('Internal server error', 500);
+    console.error(`[${requestId}] Analytics aggregation error:`, error);
+    return errorResponse('Internal server error', 500, 'INTERNAL_ERROR', requestId);
   }
 });
 
