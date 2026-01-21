@@ -48,6 +48,7 @@ const fr = {
     activate: "Activer",
     deactivate: "Désactiver",
     pageOf: "Page {{current}} sur {{total}}",
+    uploading: "Envoi en cours...",
   },
   auth: {
     login: "Connexion",
@@ -303,6 +304,16 @@ const fr = {
     identity: "Identité",
     biography: "Biographie",
     associatedContents: "Contenus associés",
+    
+    // Avatar upload
+    uploadAvatar: "Télécharger une photo",
+    removeAvatar: "Supprimer la photo",
+    cropAvatar: "Recadrer l'avatar",
+    avatarHint: "JPG, PNG, WebP ou GIF. 5 Mo max.",
+    avatarUploadSuccess: "Photo mise à jour avec succès",
+    avatarUploadError: "Erreur lors de l'envoi de la photo",
+    avatarInvalidType: "Format de fichier non supporté",
+    avatarTooLarge: "La photo ne doit pas dépasser 5 Mo",
   },
   users: {
     title: "Utilisateurs & Rôles",
@@ -407,6 +418,7 @@ const en = {
     activate: "Activate",
     deactivate: "Deactivate",
     pageOf: "Page {{current}} of {{total}}",
+    uploading: "Uploading...",
   },
   auth: {
     login: "Login",
@@ -597,6 +609,16 @@ const en = {
     identity: "Identity",
     biography: "Biography",
     associatedContents: "Associated contents",
+    
+    // Avatar upload
+    uploadAvatar: "Upload photo",
+    removeAvatar: "Remove photo",
+    cropAvatar: "Crop avatar",
+    avatarHint: "JPG, PNG, WebP or GIF. Max 5MB.",
+    avatarUploadSuccess: "Photo updated successfully",
+    avatarUploadError: "Error uploading photo",
+    avatarInvalidType: "Unsupported file format",
+    avatarTooLarge: "Photo must not exceed 5MB",
   },
   users: {
     title: "Users & Roles",

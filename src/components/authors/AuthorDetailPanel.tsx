@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useNavigate } from 'react-router-dom';
-import { User, Globe, Twitter, Linkedin, FileText, ExternalLink } from 'lucide-react';
+import { User, Twitter, Linkedin, FileText, ExternalLink } from 'lucide-react';
 import {
   Sheet,
   SheetContent,
@@ -29,6 +29,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useAuthorMutations } from '@/hooks/useAuthorMutations';
 import { useAuthorContents } from '@/hooks/useAuthors';
 import type { AuthorWithStats } from '@/hooks/useAuthors';
+import { AvatarUpload } from './AvatarUpload';
 
 const authorSchema = z.object({
   name: z.string().min(2, 'Le nom doit contenir au moins 2 caractères'),
@@ -190,14 +191,12 @@ export function AuthorDetailPanel({
                   name="avatar_url"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="flex items-center gap-2">
-                        <Globe className="h-4 w-4" />
-                        {t('authors.avatarUrl')}
-                      </FormLabel>
+                      <FormLabel>{t('authors.avatar')}</FormLabel>
                       <FormControl>
-                        <Input
-                          placeholder={t('authors.avatarPlaceholder')}
-                          {...field}
+                        <AvatarUpload
+                          currentAvatarUrl={field.value}
+                          authorName={form.watch('name') || 'A'}
+                          onAvatarChange={field.onChange}
                         />
                       </FormControl>
                       <FormMessage />
