@@ -19,6 +19,7 @@ import WorkflowsPage from "@/pages/WorkflowsPage";
 import AnalyticsPage from "@/pages/AnalyticsPage";
 import AnalyticsFixturesPage from "@/pages/AnalyticsFixturesPage";
 import AnalyticsOriginalsPage from "@/pages/AnalyticsOriginalsPage";
+import ApiFootballSettingsPage from "@/pages/ApiFootballSettingsPage";
 import NotFound from "@/pages/NotFound";
 import "@/lib/i18n";
 
@@ -77,6 +78,7 @@ function AppRoutes() {
         <Route path="/analytics" element={<AnalyticsPage />} />
         <Route path="/analytics/fixtures" element={<AnalyticsFixturesPage />} />
         <Route path="/analytics/originals" element={<AnalyticsOriginalsPage />} />
+        <Route path="/settings/api-football" element={<ApiFootballSettingsPage />} />
       </Route>
 
       <Route path="*" element={<NotFound />} />

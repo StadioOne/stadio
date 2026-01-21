@@ -15,6 +15,8 @@ import {
   ChevronDown,
   Eye,
   Tv,
+  Settings,
+  Zap,
 } from "lucide-react";
 import {
   Sidebar,
@@ -61,6 +63,10 @@ const analyticsSubItems = [
   { key: "originals", path: "/analytics/originals", label: "Originals", icon: Tv },
 ];
 
+const settingsSubItems = [
+  { key: "apiFootball", path: "/settings/api-football", label: "API-Football", icon: Zap },
+];
+
 export function AdminSidebar() {
   const { t } = useTranslation();
   const location = useLocation();
@@ -71,6 +77,7 @@ export function AdminSidebar() {
   };
 
   const isAnalyticsActive = location.pathname.startsWith("/analytics");
+  const isSettingsActive = location.pathname.startsWith("/settings");
 
   const renderNavItems = (items: typeof mainNavItems) => (
     <SidebarMenu>
@@ -128,6 +135,35 @@ export function AdminSidebar() {
                   <CollapsibleContent>
                     <SidebarMenuSub>
                       {analyticsSubItems.map((item) => (
+                        <SidebarMenuSubItem key={item.key}>
+                          <SidebarMenuSubButton asChild isActive={location.pathname === item.path}>
+                            <Link to={item.path}>
+                              <item.icon className="h-3.5 w-3.5" />
+                              <span>{item.label}</span>
+                            </Link>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      ))}
+                    </SidebarMenuSub>
+                  </CollapsibleContent>
+                </SidebarMenuItem>
+              </Collapsible>
+            </SidebarMenu>
+            
+            {/* Settings with sub-navigation */}
+            <SidebarMenu>
+              <Collapsible defaultOpen={isSettingsActive} className="group/collapsible">
+                <SidebarMenuItem>
+                  <CollapsibleTrigger asChild>
+                    <SidebarMenuButton isActive={isSettingsActive}>
+                      <Settings className="h-4 w-4" />
+                      <span>{t('nav.settings')}</span>
+                      <ChevronDown className="ml-auto h-4 w-4 transition-transform group-data-[state=open]/collapsible:rotate-180" />
+                    </SidebarMenuButton>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <SidebarMenuSub>
+                      {settingsSubItems.map((item) => (
                         <SidebarMenuSubItem key={item.key}>
                           <SidebarMenuSubButton asChild isActive={location.pathname === item.path}>
                             <Link to={item.path}>
