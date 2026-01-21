@@ -85,6 +85,7 @@ export type Database = {
       }
       analytics_events: {
         Row: {
+          anon_id: string | null
           city: string | null
           content_id: string | null
           country: string | null
@@ -92,10 +93,16 @@ export type Database = {
           event_type: string
           fixture_id: string | null
           id: string
+          ip: unknown
           metadata: Json | null
+          occurred_at: string
+          received_at: string
+          source: string
+          user_agent_full: string | null
           user_id: string | null
         }
         Insert: {
+          anon_id?: string | null
           city?: string | null
           content_id?: string | null
           country?: string | null
@@ -103,10 +110,16 @@ export type Database = {
           event_type: string
           fixture_id?: string | null
           id?: string
+          ip?: unknown
           metadata?: Json | null
+          occurred_at?: string
+          received_at?: string
+          source?: string
+          user_agent_full?: string | null
           user_id?: string | null
         }
         Update: {
+          anon_id?: string | null
           city?: string | null
           content_id?: string | null
           country?: string | null
@@ -114,7 +127,12 @@ export type Database = {
           event_type?: string
           fixture_id?: string | null
           id?: string
+          ip?: unknown
           metadata?: Json | null
+          occurred_at?: string
+          received_at?: string
+          source?: string
+          user_agent_full?: string | null
           user_id?: string | null
         }
         Relationships: [
@@ -593,6 +611,24 @@ export type Database = {
           preferred_language?: string | null
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      rate_limits: {
+        Row: {
+          key: string
+          request_count: number
+          window_start: string
+        }
+        Insert: {
+          key: string
+          request_count?: number
+          window_start?: string
+        }
+        Update: {
+          key?: string
+          request_count?: number
+          window_start?: string
         }
         Relationships: []
       }
