@@ -457,7 +457,7 @@ Deno.serve(async (req) => {
       case "sync_teams": {
         let ids = leagueIds || [];
         if (!ids.length) {
-          // Get synced leagues
+          // Get synced leagues from database
           const { data: syncedLeagues } = await supabase
             .from("leagues")
             .select("external_id")
@@ -465,7 +465,10 @@ Deno.serve(async (req) => {
 
           ids = syncedLeagues?.map((l) => parseInt(l.external_id)) || [];
           if (!ids.length) {
-            return errorResponse("No leagues configured for sync", 400);
+            return errorResponse(
+              "Sélectionnez des ligues (badges en haut) ou importez-les d'abord avec 'Sync Leagues', puis cochez celles à suivre.",
+              400
+            );
           }
         }
         const teamsResult = await syncTeams(supabase, ids);
@@ -479,7 +482,7 @@ Deno.serve(async (req) => {
       case "sync_fixtures": {
         let ids = leagueIds || [];
         if (!ids.length) {
-          // Get synced leagues
+          // Get synced leagues from database
           const { data: syncedLeagues } = await supabase
             .from("leagues")
             .select("external_id")
@@ -487,7 +490,10 @@ Deno.serve(async (req) => {
 
           ids = syncedLeagues?.map((l) => parseInt(l.external_id)) || [];
           if (!ids.length) {
-            return errorResponse("No leagues configured for sync", 400);
+            return errorResponse(
+              "Sélectionnez des ligues (badges en haut) ou importez-les d'abord avec 'Sync Leagues', puis cochez celles à suivre.",
+              400
+            );
           }
         }
         const fixturesResult = await syncFixtures(
