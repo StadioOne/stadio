@@ -35,3 +35,6 @@ verify_jwt = false
 
 [functions.public-analytics-ingest]
 verify_jwt = false
+
+[functions.admin-api-football-sync]
+verify_jwt = false
