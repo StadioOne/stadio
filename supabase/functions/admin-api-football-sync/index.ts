@@ -219,13 +219,25 @@ async function syncTeams(
   const errors: string[] = [];
   let synced = 0;
   const allTeams = new Map<string, TeamData>();
+  const leagueTeamAssociations: Array<{ league_external_id: string; team_external_id: string; season: number }> = [];
+
+  // Get league info from DB to get internal IDs and seasons
+  const { data: leaguesFromDb } = await supabase
+    .from("leagues")
+    .select("id, external_id, season")
+    .in("external_id", leagueIds.map(String)) as { data: { id: string; external_id: string; season: number | null }[] | null };
+
+  const leagueInfoMap = new Map(leaguesFromDb?.map(l => [l.external_id, { id: l.id, season: l.season || new Date().getFullYear() }]) || []);
 
   // Fetch teams for each league
   for (const leagueId of leagueIds) {
     try {
+      const leagueInfo = leagueInfoMap.get(String(leagueId));
+      const seasonToUse = leagueInfo?.season || new Date().getFullYear();
+
       const teams = await fetchFromApiFootball<ApiFootballTeam>("/teams", {
         league: leagueId,
-        season: new Date().getFullYear(),
+        season: seasonToUse,
       });
 
       for (const t of teams) {
@@ -241,6 +253,13 @@ async function syncTeams(
           updated_at: new Date().toISOString(),
         };
         allTeams.set(teamData.external_id, teamData);
+
+        // Track league-team associations
+        leagueTeamAssociations.push({
+          league_external_id: String(leagueId),
+          team_external_id: teamData.external_id,
+          season: seasonToUse,
+        });
       }
 
       // Rate limiting - wait between requests
@@ -265,6 +284,46 @@ async function syncTeams(
       errors.push(`Teams batch ${i / batchSize + 1}: ${error.message}`);
     } else {
       synced += batch.length;
+    }
+  }
+
+  // Now insert league_teams associations
+  // First, get the team UUIDs from DB
+  const teamExternalIds = Array.from(allTeams.keys());
+  if (teamExternalIds.length > 0) {
+    const { data: teamsFromDb } = await supabase
+      .from("teams")
+      .select("id, external_id")
+      .in("external_id", teamExternalIds) as { data: { id: string; external_id: string }[] | null };
+
+    const teamIdMap = new Map(teamsFromDb?.map(t => [t.external_id, t.id]) || []);
+
+    // Prepare league_teams data
+    const leagueTeamsData = leagueTeamAssociations
+      .map(assoc => {
+        const leagueInfo = leagueInfoMap.get(assoc.league_external_id);
+        const teamId = teamIdMap.get(assoc.team_external_id);
+        if (leagueInfo && teamId) {
+          return {
+            league_id: leagueInfo.id,
+            team_id: teamId,
+            season: assoc.season,
+          };
+        }
+        return null;
+      })
+      .filter(Boolean);
+
+    // Upsert league_teams in batches
+    for (let i = 0; i < leagueTeamsData.length; i += batchSize) {
+      const batch = leagueTeamsData.slice(i, i + batchSize);
+      const { error } = await supabase
+        .from("league_teams")
+        .upsert(batch as unknown[], { onConflict: "league_id,team_id,season", ignoreDuplicates: true });
+
+      if (error) {
+        errors.push(`League teams batch ${i / batchSize + 1}: ${error.message}`);
+      }
     }
   }
 
