@@ -88,7 +88,8 @@ interface LeagueDetailPanelProps {
 async function fetchFixturesPreview(
   leagueExternalId: string,
   dateFrom: string,
-  dateTo: string
+  dateTo: string,
+  season?: number | null
 ): Promise<FixturePreview[]> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.access_token) {
@@ -108,16 +109,18 @@ async function fetchFixturesPreview(
         leagueIds: [parseInt(leagueExternalId)],
         dateFrom,
         dateTo,
+        season: season || undefined,
       }),
     }
   );
 
   const result = await response.json();
   if (!response.ok) {
+    console.error("Fixtures preview error:", result);
     throw new Error(result.error || "Erreur lors de la récupération des matchs");
   }
 
-  return result.data.fixtures || [];
+  return result.data?.fixtures || [];
 }
 
 async function importSelectedFixtures(fixtureIds: number[]): Promise<{ created: number; updated: number }> {
@@ -156,27 +159,67 @@ export function LeagueDetailPanel({ league, open, onOpenChange }: LeagueDetailPa
   const [dateFrom, setDateFrom] = useState(format(new Date(), "yyyy-MM-dd"));
   const [dateTo, setDateTo] = useState(format(addDays(new Date(), 30), "yyyy-MM-dd"));
 
-  // Fetch teams for this league
+  // Fetch teams for this league via league_teams junction table
   const { data: teams, isLoading: teamsLoading } = useQuery({
-    queryKey: ["league-teams", league?.id],
+    queryKey: ["league-teams", league?.id, league?.season],
     queryFn: async () => {
-      // Teams are fetched from DB - need to find teams that play in this league
-      // We can derive this from events that have this league_id
-      const { data, error } = await supabase
+      // First try to get teams from league_teams junction table
+      const { data: leagueTeamsData, error: ltError } = await supabase
+        .from("league_teams")
+        .select("team_id, teams(*)")
+        .eq("league_id", league!.id);
+      
+      if (ltError) {
+        console.error("Error fetching league_teams:", ltError);
+        throw ltError;
+      }
+      
+      // Extract teams from the junction table results
+      if (leagueTeamsData && leagueTeamsData.length > 0) {
+        const extractedTeams = leagueTeamsData
+          .map((lt: any) => lt.teams)
+          .filter(Boolean) as Team[];
+        return extractedTeams;
+      }
+      
+      // Fallback: if no league_teams data, try to derive from events
+      const { data: eventsWithTeams, error: eventsError } = await supabase
+        .from("events")
+        .select("home_team_id, away_team_id")
+        .eq("league_id", league!.id)
+        .not("home_team_id", "is", null);
+      
+      if (eventsError) throw eventsError;
+      
+      // Get unique team IDs
+      const teamIds = new Set<string>();
+      eventsWithTeams?.forEach((e: any) => {
+        if (e.home_team_id) teamIds.add(e.home_team_id);
+        if (e.away_team_id) teamIds.add(e.away_team_id);
+      });
+      
+      if (teamIds.size === 0) {
+        return [];
+      }
+      
+      // Fetch teams by IDs
+      const { data: teamsData, error: teamsError } = await supabase
         .from("teams")
         .select("*")
+        .in("id", Array.from(teamIds))
         .eq("is_active", true)
         .order("name");
-      if (error) throw error;
-      return data as Team[];
+      
+      if (teamsError) throw teamsError;
+      return teamsData as Team[];
     },
     enabled: !!league && open,
   });
 
-  // Fetch fixtures preview from API
+  // Fetch fixtures preview from API - pass the league's season
   const { data: fixturesPreview, isLoading: fixturesLoading, refetch: refetchFixtures } = useQuery({
-    queryKey: ["fixtures-preview", league?.external_id, dateFrom, dateTo],
-    queryFn: () => fetchFixturesPreview(league!.external_id, dateFrom, dateTo),
+    queryKey: ["fixtures-preview", league?.external_id, dateFrom, dateTo, league?.season],
+    queryFn: () => fetchFixturesPreview(league!.external_id, dateFrom, dateTo, league?.season),
     enabled: !!league && open,
     staleTime: 5 * 60 * 1000,
   });
