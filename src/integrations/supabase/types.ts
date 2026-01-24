@@ -642,6 +642,7 @@ export type Database = {
           name: string
           name_fr: string | null
           season: number | null
+          sport_id: string | null
           type: string | null
           updated_at: string
         }
@@ -657,6 +658,7 @@ export type Database = {
           name: string
           name_fr?: string | null
           season?: number | null
+          sport_id?: string | null
           type?: string | null
           updated_at?: string
         }
@@ -672,10 +674,19 @@ export type Database = {
           name?: string
           name_fr?: string | null
           season?: number | null
+          sport_id?: string | null
           type?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "leagues_sport_id_fkey"
+            columns: ["sport_id"]
+            isOneToOne: false
+            referencedRelation: "sports"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       originals: {
         Row: {
@@ -846,33 +857,45 @@ export type Database = {
       }
       sports: {
         Row: {
+          api_base_url: string | null
+          api_config: Json | null
+          api_provider: string | null
           created_at: string | null
           display_order: number | null
           icon: string | null
           id: string
           is_active: boolean | null
+          is_configured: boolean | null
           name: string
           name_fr: string | null
           slug: string
           updated_at: string | null
         }
         Insert: {
+          api_base_url?: string | null
+          api_config?: Json | null
+          api_provider?: string | null
           created_at?: string | null
           display_order?: number | null
           icon?: string | null
           id?: string
           is_active?: boolean | null
+          is_configured?: boolean | null
           name: string
           name_fr?: string | null
           slug: string
           updated_at?: string | null
         }
         Update: {
+          api_base_url?: string | null
+          api_config?: Json | null
+          api_provider?: string | null
           created_at?: string | null
           display_order?: number | null
           icon?: string | null
           id?: string
           is_active?: boolean | null
+          is_configured?: boolean | null
           name?: string
           name_fr?: string | null
           slug?: string
