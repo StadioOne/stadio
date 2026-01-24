@@ -1,6 +1,7 @@
 import { useLocation, Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
+import { useTheme } from "@/contexts/ThemeContext";
 import {
   LayoutDashboard,
   Calendar,
@@ -67,9 +68,12 @@ const settingsSubItems = [
   { key: "apiFootball", path: "/settings/api-football", label: "API-Football", icon: Zap },
 ];
 
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+
 export function AdminSidebar() {
   const { t } = useTranslation();
   const location = useLocation();
+  const { resolvedTheme } = useTheme();
 
   const isActive = (path: string) => {
     if (path === "/") return location.pathname === "/";
@@ -78,6 +82,10 @@ export function AdminSidebar() {
 
   const isAnalyticsActive = location.pathname.startsWith("/analytics");
   const isSettingsActive = location.pathname.startsWith("/settings");
+
+  // Logo adapté au thème
+  const logoFileName = resolvedTheme === "dark" ? "emblem blanc.png" : "emblem noir.png";
+  const logoUrl = `${SUPABASE_URL}/storage/v1/object/public/stadiologo/${encodeURIComponent(logoFileName)}`;
 
   const renderNavItems = (items: typeof mainNavItems) => (
     <SidebarMenu>
@@ -98,9 +106,11 @@ export function AdminSidebar() {
     <Sidebar>
       <SidebarHeader className="border-b border-sidebar-border p-4">
         <Link to="/" className="flex items-center gap-3">
-          <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
-            <span className="text-primary-foreground font-bold text-sm">S</span>
-          </div>
+          <img 
+            src={logoUrl} 
+            alt="Stadio" 
+            className="h-8 w-8 object-contain"
+          />
           <span className="font-semibold">Stadio Admin</span>
         </Link>
       </SidebarHeader>
