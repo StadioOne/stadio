@@ -150,6 +150,13 @@ export type Database = {
             referencedRelation: "events"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "analytics_events_fixture_id_fkey"
+            columns: ["fixture_id"]
+            isOneToOne: false
+            referencedRelation: "events_published"
+            referencedColumns: ["id"]
+          },
         ]
       }
       audit_log: {
@@ -293,6 +300,55 @@ export type Database = {
         }
         Relationships: []
       }
+      event_categories: {
+        Row: {
+          category_id: string
+          created_at: string | null
+          display_order: number | null
+          event_id: string
+          id: string
+          is_pinned: boolean | null
+        }
+        Insert: {
+          category_id: string
+          created_at?: string | null
+          display_order?: number | null
+          event_id: string
+          id?: string
+          is_pinned?: boolean | null
+        }
+        Update: {
+          category_id?: string
+          created_at?: string | null
+          display_order?: number | null
+          event_id?: string
+          id?: string
+          is_pinned?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_categories_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_categories_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_categories_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events_published"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       event_pricing: {
         Row: {
           computation_date: string | null
@@ -339,6 +395,13 @@ export type Database = {
             columns: ["event_id"]
             isOneToOne: false
             referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_pricing_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events_published"
             referencedColumns: ["id"]
           },
         ]
@@ -418,6 +481,7 @@ export type Database = {
           round: string | null
           season: number | null
           sport: string
+          sport_id: string | null
           status: Database["public"]["Enums"]["content_status"]
           updated_at: string
           updated_by: string | null
@@ -453,6 +517,7 @@ export type Database = {
           round?: string | null
           season?: number | null
           sport: string
+          sport_id?: string | null
           status?: Database["public"]["Enums"]["content_status"]
           updated_at?: string
           updated_by?: string | null
@@ -488,6 +553,7 @@ export type Database = {
           round?: string | null
           season?: number | null
           sport?: string
+          sport_id?: string | null
           status?: Database["public"]["Enums"]["content_status"]
           updated_at?: string
           updated_by?: string | null
@@ -513,6 +579,13 @@ export type Database = {
             columns: ["league_id"]
             isOneToOne: false
             referencedRelation: "leagues"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "events_sport_id_fkey"
+            columns: ["sport_id"]
+            isOneToOne: false
+            referencedRelation: "sports"
             referencedColumns: ["id"]
           },
         ]
@@ -771,6 +844,42 @@ export type Database = {
         }
         Relationships: []
       }
+      sports: {
+        Row: {
+          created_at: string | null
+          display_order: number | null
+          icon: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          name_fr: string | null
+          slug: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          display_order?: number | null
+          icon?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          name_fr?: string | null
+          slug: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          display_order?: number | null
+          icon?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          name_fr?: string | null
+          slug?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       teams: {
         Row: {
           country: string | null
@@ -884,7 +993,82 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      events_published: {
+        Row: {
+          allowed_countries: string[] | null
+          api_description: string | null
+          api_image_url: string | null
+          api_title: string | null
+          away_score: number | null
+          away_team: string | null
+          away_team_id: string | null
+          blocked_countries: string[] | null
+          computed_price: number | null
+          computed_tier: Database["public"]["Enums"]["pricing_tier"] | null
+          created_at: string | null
+          created_by: string | null
+          event_date: string | null
+          external_id: string | null
+          home_score: number | null
+          home_team: string | null
+          home_team_id: string | null
+          id: string | null
+          is_live: boolean | null
+          is_manual_override: boolean | null
+          is_pinned: boolean | null
+          last_sync_at: string | null
+          league: string | null
+          league_id: string | null
+          manual_price: number | null
+          manual_tier: Database["public"]["Enums"]["pricing_tier"] | null
+          match_status: string | null
+          override_description: string | null
+          override_image_url: string | null
+          override_title: string | null
+          published_at: string | null
+          round: string | null
+          season: number | null
+          sport: string | null
+          sport_icon: string | null
+          sport_id: string | null
+          sport_name: string | null
+          sport_slug: string | null
+          status: Database["public"]["Enums"]["content_status"] | null
+          updated_at: string | null
+          updated_by: string | null
+          venue: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "events_away_team_id_fkey"
+            columns: ["away_team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "events_home_team_id_fkey"
+            columns: ["home_team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "events_league_id_fkey"
+            columns: ["league_id"]
+            isOneToOne: false
+            referencedRelation: "leagues"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "events_sport_id_fkey"
+            columns: ["sport_id"]
+            isOneToOne: false
+            referencedRelation: "sports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       get_user_role: {
