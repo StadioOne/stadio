@@ -67,7 +67,7 @@ const analyticsSubItems = [
 ];
 
 const settingsSubItems = [
-  { key: "apiFootball", path: "/settings/api-football", label: "API-Football", icon: Zap },
+  { key: "apiSports", path: "/settings/api-sports", label: "API Sports", icon: Zap },
 ];
 
 export function AdminSidebar() {

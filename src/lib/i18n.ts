@@ -83,7 +83,7 @@ const fr = {
     workflows: "Ops & Workflows",
     analytics: "Analytics",
     settings: "Paramètres",
-    apiFootball: "API-Football",
+    apiSports: "API Sports",
   },
   dashboard: {
     title: "Tableau de bord",
@@ -384,10 +384,10 @@ const fr = {
       recomputeNotoriety: "Recalculer notoriété",
     },
   },
-  apiFootball: {
-    title: "Réglages API-Football",
-    subtitle: "Synchronisation des données sportives",
-    description: "Configuration de la synchronisation avec API-Football",
+  apiSports: {
+    title: "Configuration API Sports",
+    subtitle: "Synchronisation des données sportives multi-sports",
+    description: "Gérez les connexions aux APIs sportives et synchronisez les données",
     apiKeyConfigured: "Clé API configurée",
     apiKeyMissing: "Clé API manquante",
     configureApiKey: "Veuillez configurer API_FOOTBALL_KEY dans les secrets",
@@ -548,7 +548,7 @@ const en = {
     workflows: "Ops & Workflows",
     analytics: "Analytics",
     settings: "Settings",
-    apiFootball: "API-Football",
+    apiSports: "API Sports",
   },
   dashboard: {
     title: "Dashboard",
@@ -784,10 +784,10 @@ const en = {
       recomputeNotoriety: "Recompute notoriety",
     },
   },
-  apiFootball: {
-    title: "API-Football Settings",
-    subtitle: "Sports data synchronization",
-    description: "API-Football synchronization configuration",
+  apiSports: {
+    title: "API Sports Configuration",
+    subtitle: "Multi-sport data synchronization",
+    description: "Manage connections to sports APIs and sync data",
     apiKeyConfigured: "API key configured",
     apiKeyMissing: "API key missing",
     configureApiKey: "Please configure API_FOOTBALL_KEY in secrets",
