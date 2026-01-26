@@ -1,175 +1,219 @@
 
-# Plan : Workflow Catalogue Multi-Sports
+# Plan : Implémentation complète de la page Journal d'Audit
 
-## Analyse de l'existant vs. Workflow souhaité
+## Contexte
 
-### Workflow actuel
-```text
-API-Sports --> Import direct --> Table events (draft) --> Page Events --> Publication
-```
+La page "Journal d'audit" (`/audit`) doit afficher l'historique complet des actions critiques effectuées par les administrateurs dans l'application Stadio Admin. Le système d'audit est déjà en place côté backend (table `audit_log` + Edge Function `admin-audit-log`), mais la page frontend est actuellement un placeholder vide.
 
-### Workflow souhaité
-```text
-API-Sports --> CATALOGUE (staging/config) --> Page Events (publié)
-                    |
-                    +-- Configuration: tarif, description, image, broadcaster
-```
+## Architecture existante
 
-## Changements requis
+### Backend (déjà implémenté)
+- **Table `audit_log`** : Stocke toutes les actions avec acteur, entité, action, diff avant/après, IP, user agent
+- **Edge Function `admin-audit-log`** : API GET avec filtres (entity, action, actorUserId, dateFrom, dateTo) et pagination
+- **Fonction `logAudit()`** : Utilisée par les autres Edge Functions pour enregistrer les actions
 
-### Phase 1 : Extension du schéma de données
+### Données disponibles dans audit_log
+| Colonne | Description |
+|---------|-------------|
+| `actor_email` | Email de l'administrateur |
+| `actor_role` | Rôle (owner, admin, editor, support) |
+| `action` | Type d'action (publish, unpublish, update, create, delete, etc.) |
+| `entity` | Type d'entité (events, originals, categories, etc.) |
+| `entity_id` | UUID de l'entité concernée |
+| `old_values` | État avant modification (JSON) |
+| `new_values` | État après modification (JSON) |
+| `metadata` | Métadonnées additionnelles (JSON) |
+| `ip_address` | Adresse IP |
+| `created_at` | Horodatage |
 
-**1.1 Ajouter le champ broadcaster à la table events**
-```sql
-ALTER TABLE public.events ADD COLUMN broadcaster TEXT;
-ALTER TABLE public.events ADD COLUMN broadcaster_logo_url TEXT;
-```
+## Fonctionnalités à implémenter
 
-**1.2 Créer un statut "catalog" pour distinguer les événements en préparation**
+### 1. Vue principale avec tableau des logs
+- Affichage chronologique des entrées (les plus récentes en premier)
+- Colonnes : Date, Acteur, Action, Entité, Détails
+- Pagination (50 entrées par page)
+- Skeleton loading pendant le chargement
 
-Option A: Ajouter une valeur au enum `content_status`
-```sql
-ALTER TYPE content_status ADD VALUE 'catalog' BEFORE 'draft';
-```
+### 2. Filtres avancés
+- **Par période** : Sélecteur de dates (7j, 30j, 90j, personnalisé)
+- **Par acteur** : Dropdown des utilisateurs ayant des entrées
+- **Par action** : publish, unpublish, update, create, delete, etc.
+- **Par entité** : events, originals, categories, authors, etc.
+- **Recherche texte** : Recherche dans les métadonnées
 
-Cela donne le cycle: `catalog` -> `draft` -> `published` -> `archived`
+### 3. Panel de détail
+- Clic sur une entrée ouvre un panel latéral
+- Affiche le diff complet avant/après
+- Affiche les métadonnées JSON formatées
+- Affiche IP et User Agent
 
-- **catalog**: Importé depuis API, en attente de configuration (visible uniquement dans API-Sports)
-- **draft**: Configuré, prêt pour publication (visible dans Events)
-- **published**: Publié et visible aux utilisateurs finaux
-- **archived**: Archivé
+### 4. Badges visuels
+- Badge de rôle coloré (owner=violet, admin=bleu, editor=vert, support=gris)
+- Badge d'action coloré (publish=vert, unpublish=orange, delete=rouge, update=bleu)
+- Badge d'entité avec icône correspondante
 
-### Phase 2 : Mise à jour de l'Edge Function admin-api-sports-sync
+### 5. Export CSV (optionnel)
+- Bouton d'export des logs filtrés au format CSV
 
-**2.1 Ajouter action `import_games`**
-```typescript
-case 'import_games': {
-  // Importer les matchs sélectionnés avec status = 'catalog'
-  // Lier au sport_id, league_id appropriés
-  // Retourner les IDs créés
-}
-```
-
-### Phase 3 : Refonte de l'interface SportConfigPanel
-
-**3.1 Onglet "Matchs" fonctionnel**
-
-Structure de l'onglet Matchs:
-```text
-+----------------------------------------------------------+
-|  [Sélection de ligue dropdown]  [Date de / Date à]       |
-+----------------------------------------------------------+
-|  Matchs disponibles depuis l'API:                         |
-|  +------------------------------------------------------+ |
-|  | [ ] PSG vs OM        | 15 fév 21:00 | Ligue 1       | |
-|  | [x] Lyon vs Monaco   | 16 fév 17:00 | Ligue 1       | |
-|  | [x] Real vs Barça    | 17 fév 21:00 | La Liga      | |
-|  +------------------------------------------------------+ |
-|                                                           |
-|  [Importer X sélectionnés dans le Catalogue]              |
-+----------------------------------------------------------+
-```
-
-**3.2 Onglet "Catalogue" (nouveau)**
-
-Affiche les événements avec `status = 'catalog'` pour ce sport.
-Permet de configurer chaque événement avant de l'envoyer vers Events.
-
-```text
-+----------------------------------------------------------+
-|  CATALOGUE - Événements en préparation                   |
-+----------------------------------------------------------+
-| Lyon vs Monaco - 16 fév                                   |
-| [Tarif: €___] [Tier: Bronze/Silver/Gold]                 |
-| [Description: _________________________]                  |
-| [Image URL: ___________________________]                  |
-| [Broadcaster: Dropdown ou texte]                         |
-|                                                           |
-| [Envoyer vers Events (status: draft)]                    |
-+----------------------------------------------------------+
-```
-
-### Phase 4 : Modifier la page Events
-
-**4.1 Exclure les événements "catalog" de la page Events**
-
-Dans `useEvents.ts`, ajouter un filtre par défaut:
-```typescript
-// Exclure les événements en "catalog" de la liste Events
-if (!filters.status || filters.status === 'all') {
-  query = query.neq('status', 'catalog');
-}
-```
-
-Les événements n'apparaissent dans Events qu'une fois sortis du Catalogue.
-
-### Phase 5 : Mise à jour du LeagueDetailPanel pour multi-sports
-
-**5.1 Modifier pour utiliser admin-api-sports-sync**
-
-Remplacer l'appel à `admin-api-football-sync` par `admin-api-sports-sync` avec le slug du sport en paramètre.
-
-## Structure des fichiers à créer/modifier
+## Fichiers à créer/modifier
 
 | Fichier | Action | Description |
 |---------|--------|-------------|
-| Migration SQL | Créer | Ajouter `broadcaster`, modifier enum |
-| `supabase/functions/admin-api-sports-sync/index.ts` | Modifier | Ajouter action `import_games` |
-| `src/components/api-sports/SportConfigPanel.tsx` | Modifier | Implémenter onglet Matchs |
-| `src/components/api-sports/CatalogTab.tsx` | Créer | Nouvel onglet Catalogue |
-| `src/components/api-sports/GamesTab.tsx` | Créer | Onglet matchs avec import |
-| `src/hooks/useCatalogEvents.ts` | Créer | Hook pour gérer les events catalog |
-| `src/hooks/useEvents.ts` | Modifier | Exclure status catalog |
-| `src/lib/i18n.ts` | Modifier | Traductions catalogue |
+| `src/pages/AuditLogPage.tsx` | Modifier | Page principale avec tableau et filtres |
+| `src/components/audit/AuditFilters.tsx` | Créer | Composant de filtres (période, acteur, action, entité) |
+| `src/components/audit/AuditTable.tsx` | Créer | Tableau des entrées d'audit |
+| `src/components/audit/AuditRow.tsx` | Créer | Ligne du tableau avec badges |
+| `src/components/audit/AuditDetailPanel.tsx` | Créer | Panel latéral de détail avec diff |
+| `src/components/audit/ActionBadge.tsx` | Créer | Badge coloré pour les actions |
+| `src/components/audit/EntityBadge.tsx` | Créer | Badge avec icône pour les entités |
+| `src/components/audit/RoleBadge.tsx` | Créer | Badge coloré pour les rôles |
+| `src/components/audit/DiffViewer.tsx` | Créer | Affichage du diff JSON avant/après |
+| `src/hooks/useAuditLogs.ts` | Créer | Hook React Query pour les logs d'audit |
+| `src/lib/api.ts` | Modifier | Corriger le client API pour audit |
+| `src/lib/i18n.ts` | Modifier | Ajouter traductions audit |
 
-## Ordre d'implémentation avec tests
+## Détails techniques
 
-### Étape 1: Migration base de données
-- Ajouter colonnes broadcaster
-- Ajouter valeur 'catalog' à l'enum
-- **Test**: Vérifier schéma mis à jour
+### Hook useAuditLogs
 
-### Étape 2: Mise à jour Edge Function
-- Ajouter action import_games avec status='catalog'
-- **Test**: Appel API pour importer des matchs
+```typescript
+interface AuditLogEntry {
+  id: string;
+  actorUserId: string | null;
+  actorEmail: string | null;
+  actorRole: string;
+  action: string;
+  entity: string;
+  entityId: string | null;
+  diff: {
+    before: Record<string, unknown> | null;
+    after: Record<string, unknown> | null;
+  };
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
+  ipAddress: string | null;
+}
 
-### Étape 3: Onglet Matchs dans SportConfigPanel
-- Interface de prévisualisation et sélection
-- Bouton d'import vers catalogue
-- **Test**: Sélectionner et importer des matchs
-
-### Étape 4: Onglet Catalogue
-- Liste des événements catalog
-- Formulaire de configuration (prix, description, image, broadcaster)
-- Action "Promouvoir vers Events"
-- **Test**: Configurer un événement et le promouvoir
-
-### Étape 5: Filtre Events page
-- Exclure status=catalog de la page Events
-- **Test**: Vérifier que seuls draft/published apparaissent
-
-## Résumé du flux final
-
-```text
-1. API-Sports > Sélectionner sport > Onglet Matchs
-   → Prévisualiser matchs disponibles
-   → Sélectionner et importer vers Catalogue
-
-2. API-Sports > Onglet Catalogue  
-   → Voir événements importés (status=catalog)
-   → Configurer: tarif, description, image, broadcaster
-   → Promouvoir vers Events (status->draft)
-
-3. Page Events
-   → Voir événements draft/published uniquement
-   → Publier les drafts pour les rendre visibles aux utilisateurs
+interface AuditFilters {
+  entity?: string;
+  action?: string;
+  actorUserId?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  limit?: number;
+  offset?: number;
+}
 ```
 
-## Questions techniques résolues
+### Correction du client API
 
-| Question | Réponse |
-|----------|---------|
-| Où stocker le catalogue? | Table events avec status='catalog' |
-| Comment différencier catalogue vs events? | Nouveau status enum 'catalog' |
-| Le broadcaster est-il une table liée? | Non, champ texte simple pour commencer |
-| Comment tester? | Tests après chaque étape via l'UI |
+L'API actuelle dans `src/lib/api.ts` ne gère pas correctement la réponse paginée. Il faut la corriger pour extraire `logs` et `pagination` de la réponse.
+
+### Palette de couleurs pour les badges
+
+**Actions:**
+- `publish` : bg-green-100 text-green-800
+- `unpublish` : bg-orange-100 text-orange-800
+- `create` : bg-blue-100 text-blue-800
+- `update` : bg-sky-100 text-sky-800
+- `delete` : bg-red-100 text-red-800
+- autres : bg-gray-100 text-gray-800
+
+**Entités:**
+- `events` : Calendar icon
+- `originals` : Film icon
+- `categories` : Folder icon
+- `authors` : User icon
+- `pricing` : DollarSign icon
+- `analytics` : BarChart icon
+
+**Rôles:**
+- `owner` : bg-purple-100 text-purple-800
+- `admin` : bg-blue-100 text-blue-800
+- `editor` : bg-green-100 text-green-800
+- `support` : bg-gray-100 text-gray-800
+
+## Ordre d'implémentation
+
+### Étape 1 : Hook et API client (10 min)
+1. Créer `src/hooks/useAuditLogs.ts`
+2. Corriger `src/lib/api.ts` pour la réponse audit
+
+### Étape 2 : Composants de base (15 min)
+1. Créer les badges (Action, Entity, Role)
+2. Créer le DiffViewer
+
+### Étape 3 : Tableau et filtres (20 min)
+1. Créer AuditFilters
+2. Créer AuditTable + AuditRow
+
+### Étape 4 : Panel de détail (10 min)
+1. Créer AuditDetailPanel
+
+### Étape 5 : Page principale (10 min)
+1. Refondre AuditLogPage
+2. Ajouter traductions i18n
+
+### Étape 6 : Tests
+- Vérifier le chargement des logs
+- Tester les filtres
+- Tester l'ouverture du panel de détail
+
+## Maquette de l'interface
+
+```text
++------------------------------------------------------------------+
+|  Journal d'audit                              [7j] [30j] [90j]   |
+|  Historique des actions administratives                          |
++------------------------------------------------------------------+
+|  [Tous les acteurs ▼] [Toutes les actions ▼] [Toutes les entités ▼] |
++------------------------------------------------------------------+
+|                                                                   |
+|  Date           Acteur              Action    Entité    Détails   |
+|  ─────────────────────────────────────────────────────────────── |
+|  26 jan 17:30   admin@stadio.io    [publish] [events]  PSG vs OM |
+|                 [admin]                                           |
+|  ─────────────────────────────────────────────────────────────── |
+|  26 jan 16:45   editor@stadio.io   [update]  [originals] Article |
+|                 [editor]                                          |
+|  ─────────────────────────────────────────────────────────────── |
+|                                                                   |
+|  [< Précédent]  Page 1 sur 5  [Suivant >]                        |
++------------------------------------------------------------------+
+```
+
+## Panel de détail (Sheet)
+
+```text
++--------------------------------------+
+|  Détail de l'action         [×]     |
++--------------------------------------+
+|  Action: publish                     |
+|  Entité: events                      |
+|  ID: 550e8400-e29b-41d4-a716-...    |
++--------------------------------------+
+|  Acteur                              |
+|  ┌─────────────────────────────────┐|
+|  │ admin@stadio.io                 │|
+|  │ Rôle: admin                     │|
+|  │ IP: 192.168.1.1                 │|
+|  └─────────────────────────────────┘|
++--------------------------------------+
+|  Modifications                       |
+|  ┌─────────────────────────────────┐|
+|  │ status: "draft" → "published"  │|
+|  │ published_at: null → "2026..."  │|
+|  └─────────────────────────────────┘|
++--------------------------------------+
+|  Métadonnées                         |
+|  ┌─────────────────────────────────┐|
+|  │ { "request_id": "abc123" }     │|
+|  └─────────────────────────────────┘|
++--------------------------------------+
+```
+
+## Notes de sécurité
+
+- Les logs d'audit sont accessibles en lecture seule (pas d'INSERT/UPDATE/DELETE depuis le frontend)
+- Les rôles `editor` ne voient que les logs des entités `events`, `originals`, `categories`
+- Les adresses IP et user agents sont masqués pour les rôles non-admin (optionnel)
