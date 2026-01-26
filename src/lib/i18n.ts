@@ -74,9 +74,10 @@ const fr = {
   },
   nav: {
     dashboard: "Tableau de bord",
+    catalog: "Catalogue",
     events: "Événements",
     pricing: "Tarification",
-    categories: "Catalogues",
+    categories: "Collections",
     originals: "Stadio Originals",
     authors: "Auteurs",
     users: "Utilisateurs",

@@ -20,6 +20,7 @@ import {
   Tv,
   Settings,
   Zap,
+  Package,
 } from "lucide-react";
 import {
   Sidebar,
@@ -44,6 +45,7 @@ import {
 
 const mainNavItems = [
   { key: "dashboard", path: "/", icon: LayoutDashboard },
+  { key: "catalog", path: "/catalog", icon: Package },
   { key: "events", path: "/events", icon: Calendar },
   { key: "pricing", path: "/pricing", icon: DollarSign },
   { key: "categories", path: "/categories", icon: FolderOpen },

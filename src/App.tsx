@@ -20,6 +20,7 @@ import AnalyticsPage from "@/pages/AnalyticsPage";
 import AnalyticsFixturesPage from "@/pages/AnalyticsFixturesPage";
 import AnalyticsOriginalsPage from "@/pages/AnalyticsOriginalsPage";
 import ApiSportsSettingsPage from "@/pages/ApiSportsSettingsPage";
+import CatalogPage from "@/pages/CatalogPage";
 import NotFound from "@/pages/NotFound";
 import "@/lib/i18n";
 
@@ -67,6 +68,7 @@ function AppRoutes() {
         }
       >
         <Route path="/" element={<DashboardPage />} />
+        <Route path="/catalog" element={<CatalogPage />} />
         <Route path="/events" element={<EventsPage />} />
         <Route path="/pricing" element={<PricingPage />} />
         <Route path="/categories" element={<CategoriesPage />} />
