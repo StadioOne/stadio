@@ -75,6 +75,7 @@ const fr = {
     invalidCredentials: "Identifiants invalides",
     accessDenied: "Accès refusé - Compte administrateur requis",
     sessionExpired: "Session expirée",
+    requestAccess: "Pour demander un accès, contactez un administrateur.",
   },
   nav: {
     dashboard: "Tableau de bord",
@@ -648,6 +649,7 @@ const en = {
     signIn: "Sign in",
     signingIn: "Signing in...",
     signUp: "Sign up",
+    requestAccess: "To request access, contact an administrator.",
     signingUp: "Signing up...",
     createAccount: "Create an account",
     alreadyHaveAccount: "Already have an account?",
