@@ -20,9 +20,12 @@ import {
   Calendar,
   Trophy,
   Users,
-  LayoutGrid
+  LayoutGrid,
+  Package
 } from "lucide-react";
 import { LeagueCard } from "@/components/api-football/LeagueCard";
+import { GamesTab } from "./GamesTab";
+import { CatalogTab } from "./CatalogTab";
 
 interface Sport {
   id: string;
@@ -219,7 +222,7 @@ export function SportConfigPanel({ sport }: SportConfigPanelProps) {
 
       {/* Configuration Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="leagues" className="flex items-center gap-2">
             <Trophy className="h-4 w-4" />
             Ligues
@@ -231,6 +234,10 @@ export function SportConfigPanel({ sport }: SportConfigPanelProps) {
           <TabsTrigger value="games" className="flex items-center gap-2">
             <Calendar className="h-4 w-4" />
             Matchs
+          </TabsTrigger>
+          <TabsTrigger value="catalog" className="flex items-center gap-2">
+            <Package className="h-4 w-4" />
+            Catalogue
           </TabsTrigger>
           <TabsTrigger value="architecture" className="flex items-center gap-2">
             <LayoutGrid className="h-4 w-4" />
@@ -344,12 +351,12 @@ export function SportConfigPanel({ sport }: SportConfigPanelProps) {
 
         {/* Games Tab */}
         <TabsContent value="games">
-          <Card>
-            <CardContent className="p-8 text-center text-muted-foreground">
-              <Calendar className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p>Sélectionnez une ligue pour prévisualiser les matchs</p>
-            </CardContent>
-          </Card>
+          <GamesTab sport={sport} />
+        </TabsContent>
+
+        {/* Catalog Tab */}
+        <TabsContent value="catalog">
+          <CatalogTab sport={sport} />
         </TabsContent>
 
         {/* Architecture Tab */}

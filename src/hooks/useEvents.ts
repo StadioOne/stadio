@@ -45,8 +45,12 @@ export function useEvents(filters: EventsFilters = {}) {
         .select('*, pricing:event_pricing(*)', { count: 'exact' });
 
       // Apply filters
+      // Always exclude 'catalog' status from Events page unless explicitly requested
       if (filters.status && filters.status !== 'all') {
         query = query.eq('status', filters.status);
+      } else {
+        // Exclude catalog events from the main Events page
+        query = query.neq('status', 'catalog');
       }
 
       if (filters.sport) {

@@ -1,8 +1,8 @@
 import { cn } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
-import { Circle, CheckCircle2, Archive, Radio } from "lucide-react";
+import { Circle, CheckCircle2, Archive, Radio, Package } from "lucide-react";
 
-type Status = "draft" | "published" | "archived" | "live";
+type Status = "draft" | "published" | "archived" | "live" | "catalog";
 
 interface StatusBadgeProps {
   status: Status;
@@ -14,6 +14,11 @@ const statusConfig: Record<
   Status,
   { icon: React.ElementType; className: string; labelKey: string }
 > = {
+  catalog: {
+    icon: Package,
+    className: "bg-amber-500/10 text-amber-600 border-amber-500/20",
+    labelKey: "common.catalog",
+  },
   draft: {
     icon: Circle,
     className: "bg-status-draft/10 text-status-draft border-status-draft/20",
