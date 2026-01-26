@@ -352,23 +352,28 @@ async function getGamesPreview(
   season?: number
 ): Promise<{ games: any[]; errors: string[] }> {
   const config = SPORT_API_CONFIG[sportSlug];
-  const params: Record<string, string | number> = {
-    league: leagueId,
-    from: dateFrom,
-    to: dateTo,
-  };
+  const params: Record<string, string | number> = {};
 
-  if (season) {
-    params.season = season;
-  }
-
-  // For football, use different param names
+  // Football API requires season param and uses 'from'/'to' for dates
   if (sportSlug === 'football') {
-    delete params.from;
-    delete params.to;
+    params.league = leagueId;
     params.from = dateFrom;
     params.to = dateTo;
+    // Season is required for football - if not provided, don't include it (API will use current)
+    if (season) {
+      params.season = season;
+    }
+  } else {
+    // Other sports (basketball, etc.) use date range without season
+    // Basketball API uses 'date' param for single day or 'season' for full season
+    // For date ranges, we need to use 'date' param with format YYYY-MM-DD
+    params.league = leagueId;
+    // Most non-football APIs accept date range differently
+    // Try without season first - API-Sports basketball doesn't require season for date queries
+    params.date = dateFrom; // Start with single date query
   }
+
+  console.log(`[API-Sports] Params for ${sportSlug}:`, JSON.stringify(params));
 
   try {
     const { response, errors } = await fetchFromSportApi<any>(
@@ -378,6 +383,7 @@ async function getGamesPreview(
     );
 
     if (errors && errors.length > 0) {
+      console.log(`[API-Sports] API returned errors:`, errors);
       return { games: [], errors };
     }
 
@@ -410,7 +416,7 @@ async function getGamesPreview(
           },
         };
       } else {
-        // Generic format for other sports
+        // Generic format for other sports (basketball, etc.)
         return {
           id: item.id || item.game?.id,
           date: item.date || item.game?.date?.start,
@@ -440,6 +446,7 @@ async function getGamesPreview(
 
     return { games, errors: [] };
   } catch (error) {
+    console.error(`[API-Sports] Error fetching games:`, error);
     return {
       games: [],
       errors: [error instanceof Error ? error.message : 'Unknown error'],
