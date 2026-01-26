@@ -1,352 +1,469 @@
 
-# Plan : Implémentation complète de la page Utilisateurs
+# Plan : Implémentation complète de la page Ops & Workflows
 
 ## Contexte
 
-La page "Utilisateurs" (`/users`) permet de gérer les administrateurs de la plateforme Stadio Admin et leurs rôles (owner, admin, editor, support). Actuellement, la page est un placeholder vide. Le système de rôles est déjà en place dans la base de données avec les tables `profiles` et `user_roles`.
+La page "Ops & Workflows" (`/workflows`) permet de gérer et monitorer les automatisations n8n intégrées à Stadio Admin. Actuellement, c'est un placeholder vide. L'intégration n8n existe déjà avec :
+- Edge Function `admin-n8n-trigger` pour déclencher les workflows
+- Table `workflow_runs` pour stocker l'historique des exécutions
+- MCP n8n connecté avec 3 workflows actifs détectés
+- Secrets configurés : `N8N_WEBHOOK_URL` et `N8N_WEBHOOK_SECRET`
 
-## Architecture existante
+## Workflows n8n existants (via MCP)
 
-### Base de données
-- **Table `profiles`** : Informations utilisateur (user_id, email, full_name, avatar_url, preferred_language)
-- **Table `user_roles`** : Attribution des rôles admin (user_id, role)
-- **Enum `admin_role`** : owner, admin, editor, support
-- **Fonctions RPC** : `is_admin()`, `has_role()`, `get_user_role()`
+| Nom | Description | Déclencheur |
+|-----|-------------|-------------|
+| Auto Sync Compétitions Football | Synchronisation automatique des matchs | Schedule (3h) |
+| Mise à jour automatique des prix | Recalcul des prix événements | Schedule (3h50) |
+| Calcul Automatique Notoriété | Calcul de notoriété des événements | Schedule (3h30) |
 
-### Politiques RLS actuelles
-- `user_roles` : Seuls les `owner` peuvent gérer les rôles (INSERT/UPDATE/DELETE)
-- `profiles` : Les admins peuvent voir tous les profils
+## Fonctionnalités à implémenter
 
-### Données existantes
-Un seul utilisateur admin actuellement :
-- Email: wearestadio@gmail.com
-- Nom: MARQUES
-- Rôle: owner
+### 1. Vue principale avec cartes de workflows
+- Affichage en grille des workflows disponibles (prédéfinis + n8n dynamiques)
+- Chaque carte affiche : Nom, Description, Statut, Dernier run, Bouton Trigger
+- Badge de statut coloré (pending=jaune, running=bleu, success=vert, failed=rouge)
 
-## Fonctionnalités a implementer
+### 2. Statistiques globales
+- Total des exécutions
+- Répartition par statut (succès, échecs, en cours)
+- Temps moyen d'exécution
 
-### 1. Vue principale avec liste des utilisateurs
-- Affichage en tableau avec colonnes : Avatar, Nom, Email, Role, Date d'ajout, Actions
-- Badge de role colore (owner=violet, admin=bleu, editor=vert, support=gris)
-- Pagination si necessaire
+### 3. Historique des exécutions
+- Tableau chronologique des `workflow_runs`
+- Colonnes : Date, Workflow, Déclenché par, Statut, Durée, Erreur
+- Pagination (20 entrées par page)
+- Filtres par workflow et statut
 
-### 2. Statistiques
-- Total des administrateurs
-- Repartition par role (owners, admins, editors, support)
+### 4. Panel de détail d'exécution
+- Clic sur une ligne ouvre un panel latéral
+- Affiche les données d'entrée (input_data) et sortie (output_data)
+- Affiche le message d'erreur si échec
+- Durée d'exécution
 
-### 3. Filtres
-- Recherche par nom/email
-- Filtre par role
+### 5. Déclenchement manuel
+- Bouton "Déclencher" sur chaque workflow
+- Confirmation avant exécution
+- Feedback immédiat (toast + mise à jour statut)
+- Restrictions par rôle (certains workflows réservés aux admin/owner)
 
-### 4. Panel de detail/modification
-- Voir les informations de l'utilisateur
-- Modifier le role (seulement si l'utilisateur connecte est owner)
-- Pas de suppression de role pour le dernier owner
+### 6. Connexion n8n (optionnel)
+- Indicateur de connexion n8n (configuré/non configuré)
+- Affichage des workflows découverts via MCP
 
-### 5. Ajout d'un nouvel admin
-- Recherche d'un utilisateur existant par email (depuis auth.users via profiles)
-- Attribution d'un role
-
-### 6. Restrictions de securite
-- Seuls les owners peuvent modifier/ajouter/supprimer des roles
-- Un owner ne peut pas retirer son propre role owner s'il est le dernier
-- Les autres roles (admin, editor, support) ont un acces en lecture seule
-
-## Fichiers a creer/modifier
+## Fichiers à créer/modifier
 
 | Fichier | Action | Description |
 |---------|--------|-------------|
-| `src/hooks/useUsers.ts` | Creer | Hook React Query pour les utilisateurs avec roles |
-| `src/hooks/useUserMutations.ts` | Creer | Hook pour les mutations (ajout/modification de role) |
-| `src/pages/UsersPage.tsx` | Modifier | Page principale refondee |
-| `src/components/users/UserFilters.tsx` | Creer | Filtres (recherche, role) |
-| `src/components/users/UserStats.tsx` | Creer | Statistiques des utilisateurs |
-| `src/components/users/UserTable.tsx` | Creer | Tableau des utilisateurs |
-| `src/components/users/UserRow.tsx` | Creer | Ligne du tableau |
-| `src/components/users/UserDetailPanel.tsx` | Creer | Panel lateral de modification |
-| `src/components/users/UserEmptyState.tsx` | Creer | Etat vide |
-| `src/components/users/RoleBadge.tsx` | Creer | Badge de role (reutilisation du composant audit) |
-| `src/components/users/AddUserDialog.tsx` | Creer | Dialog pour ajouter un admin |
-| `src/lib/i18n.ts` | Modifier | Ajouter traductions users |
+| `src/hooks/useWorkflows.ts` | Créer | Hook React Query pour workflow_runs + stats |
+| `src/hooks/useWorkflowMutations.ts` | Créer | Hook pour déclencher les workflows |
+| `src/pages/WorkflowsPage.tsx` | Modifier | Page principale refondée |
+| `src/components/workflows/WorkflowStats.tsx` | Créer | Statistiques globales |
+| `src/components/workflows/WorkflowCard.tsx` | Créer | Carte d'un workflow disponible |
+| `src/components/workflows/WorkflowGrid.tsx` | Créer | Grille des workflows disponibles |
+| `src/components/workflows/WorkflowRunsTable.tsx` | Créer | Tableau de l'historique |
+| `src/components/workflows/WorkflowRunRow.tsx` | Créer | Ligne du tableau |
+| `src/components/workflows/WorkflowRunDetailPanel.tsx` | Créer | Panel de détail |
+| `src/components/workflows/StatusBadge.tsx` | Créer | Badge de statut workflow |
+| `src/components/workflows/WorkflowEmptyState.tsx` | Créer | État vide |
+| `src/lib/i18n.ts` | Modifier | Ajouter traductions workflows |
 
-## Details techniques
+## Détails techniques
 
 ### Types
 
 ```typescript
-interface UserWithRole {
-  id: string;              // profile.id
-  userId: string;          // auth user id
-  email: string;
-  fullName: string | null;
-  avatarUrl: string | null;
-  role: AdminRole | null;  // null si pas encore de role
-  roleId: string | null;   // user_roles.id
-  createdAt: string;       // date d'ajout du role
+interface WorkflowRun {
+  id: string;
+  workflow_name: string;
+  workflow_type: string | null;
+  status: 'pending' | 'running' | 'success' | 'failed';
+  triggered_by: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+  duration_ms: number | null;
+  input_data: Record<string, unknown> | null;
+  output_data: Record<string, unknown> | null;
+  error_message: string | null;
+  created_at: string;
 }
 
-type AdminRole = 'owner' | 'admin' | 'editor' | 'support';
-
-interface UsersFilters {
-  search?: string;
-  role?: AdminRole | 'all';
+interface WorkflowDefinition {
+  id: string;
+  name: string;
+  nameKey: string; // i18n key
+  description: string;
+  descriptionKey: string;
+  icon: LucideIcon;
+  type: 'internal' | 'n8n';
+  requiredRoles: AdminRole[];
+  params?: Record<string, unknown>;
 }
 
-interface UsersStats {
+interface WorkflowsStats {
   total: number;
-  owners: number;
-  admins: number;
-  editors: number;
-  support: number;
+  pending: number;
+  running: number;
+  success: number;
+  failed: number;
+  avgDurationMs: number | null;
+}
+
+interface WorkflowsFilters {
+  workflow?: string;
+  status?: 'pending' | 'running' | 'success' | 'failed' | 'all';
+  limit?: number;
+  offset?: number;
 }
 ```
 
-### Hook useUsers
+### Workflows prédéfinis
 
 ```typescript
-// Requete jointe profiles + user_roles
-const { data, isLoading } = useQuery({
-  queryKey: ['admin-users', filters],
-  queryFn: async () => {
-    let query = supabase
-      .from('user_roles')
-      .select(`
-        id,
-        user_id,
-        role,
-        created_at,
-        profiles!inner(email, full_name, avatar_url)
-      `)
-      .order('created_at', { ascending: false });
-    
-    if (filters.role && filters.role !== 'all') {
-      query = query.eq('role', filters.role);
-    }
-    
-    // Recherche sur email ou nom
-    if (filters.search) {
-      query = query.or(`profiles.email.ilike.%${filters.search}%,profiles.full_name.ilike.%${filters.search}%`);
-    }
-    
-    return query;
-  }
-});
+const WORKFLOW_DEFINITIONS: WorkflowDefinition[] = [
+  {
+    id: 'import_fixtures',
+    name: 'Import Fixtures',
+    nameKey: 'workflows.definitions.importFixtures',
+    description: 'Import des matchs depuis API-Sports',
+    descriptionKey: 'workflows.definitions.importFixturesDesc',
+    icon: Calendar,
+    type: 'n8n',
+    requiredRoles: ['admin', 'owner'],
+  },
+  {
+    id: 'recompute_pricing',
+    name: 'Recalcul Pricing',
+    nameKey: 'workflows.definitions.recomputePricing',
+    description: 'Recalcule les prix de tous les événements',
+    descriptionKey: 'workflows.definitions.recomputePricingDesc',
+    icon: DollarSign,
+    type: 'n8n',
+    requiredRoles: ['admin', 'owner'],
+  },
+  {
+    id: 'rebuild_editorial_lists',
+    name: 'Rebuild Listes',
+    nameKey: 'workflows.definitions.rebuildLists',
+    description: 'Reconstruit les listes éditoriales',
+    descriptionKey: 'workflows.definitions.rebuildListsDesc',
+    icon: List,
+    type: 'n8n',
+    requiredRoles: ['editor', 'admin', 'owner'],
+  },
+  {
+    id: 'refresh_notoriety',
+    name: 'Refresh Notoriété',
+    nameKey: 'workflows.definitions.refreshNotoriety',
+    description: 'Met à jour les scores de notoriété',
+    descriptionKey: 'workflows.definitions.refreshNotorietyDesc',
+    icon: TrendingUp,
+    type: 'n8n',
+    requiredRoles: ['admin', 'owner'],
+  },
+  {
+    id: 'send_notifications',
+    name: 'Notifications',
+    nameKey: 'workflows.definitions.sendNotifications',
+    description: 'Envoie les notifications push',
+    descriptionKey: 'workflows.definitions.sendNotificationsDesc',
+    icon: Bell,
+    type: 'n8n',
+    requiredRoles: ['admin', 'owner'],
+  },
+];
 ```
 
-### Hook useUserMutations
+### Hook useWorkflows
 
 ```typescript
-// Modifier le role d'un utilisateur
-const updateRole = useMutation({
-  mutationFn: async ({ roleId, newRole }: { roleId: string; newRole: AdminRole }) => {
-    return supabase
-      .from('user_roles')
-      .update({ role: newRole })
-      .eq('id', roleId);
-  }
-});
+// Récupérer l'historique des exécutions
+export function useWorkflowRuns(filters?: WorkflowsFilters) {
+  return useQuery({
+    queryKey: ['workflow-runs', filters],
+    queryFn: async () => {
+      let query = supabase
+        .from('workflow_runs')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      if (filters?.workflow) {
+        query = query.eq('workflow_name', filters.workflow);
+      }
+      if (filters?.status && filters.status !== 'all') {
+        query = query.eq('status', filters.status);
+      }
+      if (filters?.limit) {
+        query = query.limit(filters.limit);
+      }
+      if (filters?.offset) {
+        query = query.range(filters.offset, filters.offset + (filters.limit || 20) - 1);
+      }
+      
+      return query;
+    }
+  });
+}
 
-// Supprimer le role (retirer l'acces admin)
-const removeRole = useMutation({
-  mutationFn: async (roleId: string) => {
-    return supabase
-      .from('user_roles')
-      .delete()
-      .eq('id', roleId);
-  }
-});
-
-// Ajouter un nouveau role
-const addRole = useMutation({
-  mutationFn: async ({ userId, role }: { userId: string; role: AdminRole }) => {
-    return supabase
-      .from('user_roles')
-      .insert({ user_id: userId, role });
-  }
-});
+// Statistiques
+export function useWorkflowsStats() {
+  return useQuery({
+    queryKey: ['workflow-stats'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('workflow_runs')
+        .select('status, duration_ms');
+      
+      if (error) throw error;
+      
+      return {
+        total: data.length,
+        pending: data.filter(r => r.status === 'pending').length,
+        running: data.filter(r => r.status === 'running').length,
+        success: data.filter(r => r.status === 'success').length,
+        failed: data.filter(r => r.status === 'failed').length,
+        avgDurationMs: calculateAvg(data.map(r => r.duration_ms).filter(Boolean)),
+      };
+    }
+  });
+}
 ```
 
-### Hierarchie des roles
+### Hook useWorkflowMutations
 
-```text
-owner (4)     - Acces complet, gestion des roles
-   |
-admin (3)     - Acces complet sauf gestion des roles
-   |
-editor (2)    - Gestion du contenu (events, originals, categories)
-   |
-support (1)   - Lecture seule
+```typescript
+export function useTriggerWorkflow() {
+  const queryClient = useQueryClient();
+  const { t } = useTranslation();
+
+  return useMutation({
+    mutationFn: async ({ workflow, params }: { workflow: string; params?: Record<string, unknown> }) => {
+      return adminApi.workflows.trigger(workflow as WorkflowType, params);
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['workflow-runs'] });
+      queryClient.invalidateQueries({ queryKey: ['workflow-stats'] });
+      toast.success(t('workflows.triggerSuccess', { name: data.workflow }));
+    },
+    onError: (error) => {
+      toast.error(handleApiError(error));
+    },
+  });
+}
 ```
+
+### Palette de couleurs pour les statuts
+
+| Statut | Couleur | Badge |
+|--------|---------|-------|
+| pending | Jaune | bg-yellow-100 text-yellow-800 |
+| running | Bleu | bg-blue-100 text-blue-800 + animation pulse |
+| success | Vert | bg-green-100 text-green-800 |
+| failed | Rouge | bg-red-100 text-red-800 |
 
 ## Maquette de l'interface
 
 ```text
 +------------------------------------------------------------------+
-|  Utilisateurs & Roles                      [+ Nouvel admin]      |
-|  Gestion des administrateurs                                     |
+|  Ops & Workflows                                                  |
+|  Automatisations et jobs n8n                                     |
 +------------------------------------------------------------------+
-|  [Total: 4]  [Owners: 1]  [Admins: 2]  [Editors: 1]  [Support: 0]|
+|  [Total: 15] [Succès: 12] [Échecs: 2] [En cours: 1] [Durée moy]  |
 +------------------------------------------------------------------+
-|  [Rechercher...]                    [Tous les roles v]           |
+|  WORKFLOWS DISPONIBLES                                            |
 +------------------------------------------------------------------+
-|                                                                   |
-|  Avatar  Nom              Email                Role      Actions  |
+|  +-----------------+  +-----------------+  +-----------------+    |
+|  | [📅 Icon]       |  | [💰 Icon]       |  | [📋 Icon]       |   |
+|  | Import Fixtures |  | Recalcul Prix   |  | Rebuild Listes  |   |
+|  | Dernier: 3h     |  | Dernier: 3h50   |  | Jamais          |   |
+|  | [✓ Succès]      |  | [✓ Succès]      |  | [- Aucun]       |   |
+|  | [Déclencher]    |  | [Déclencher]    |  | [Déclencher]    |   |
+|  +-----------------+  +-----------------+  +-----------------+    |
++------------------------------------------------------------------+
+|  HISTORIQUE DES EXÉCUTIONS                                        |
++------------------------------------------------------------------+
+|  [Tous les workflows ▼]  [Tous les statuts ▼]                    |
++------------------------------------------------------------------+
+|  Date           Workflow           Déclenché par  Statut   Durée |
 |  ─────────────────────────────────────────────────────────────── |
-|  [M]     MARQUES          wearestadio@...     [owner]    [...]   |
-|  [J]     Jean Dupont      jean@stadio.io      [admin]    [...]   |
-|  [P]     Pierre Martin    pierre@stadio.io    [editor]   [...]   |
+|  26 jan 03:00   Import Fixtures    Automatique    [✓]      45s   |
+|  26 jan 03:50   Recalcul Prix      Automatique    [✓]      12s   |
+|  25 jan 15:30   Import Fixtures    admin@...      [✗]      -     |
+|  ─────────────────────────────────────────────────────────────── |
+|  [< Précédent]  Page 1 sur 3  [Suivant >]                        |
 +------------------------------------------------------------------+
 ```
 
-### Panel de detail (Sheet)
+### Panel de détail (Sheet)
 
 ```text
 +--------------------------------------+
-|  Modifier le role           [x]     |
+|  Détail de l'exécution       [×]    |
 +--------------------------------------+
-|  Utilisateur                         |
+|  Workflow: Import Fixtures           |
+|  Type: n8n                           |
+|  ID: 550e8400-e29b-41d4...          |
++--------------------------------------+
+|  Statut                              |
 |  ┌─────────────────────────────────┐|
-|  │ [Avatar]                        │|
-|  │ MARQUES                         │|
-|  │ wearestadio@gmail.com           │|
-|  │ Membre depuis: 17 jan 2026      │|
+|  │ [✓ Succès]                      │|
+|  │ Démarré: 26 jan 2026 03:00:00   │|
+|  │ Terminé: 26 jan 2026 03:00:45   │|
+|  │ Durée: 45 secondes              │|
 |  └─────────────────────────────────┘|
 +--------------------------------------+
-|  Role actuel                         |
+|  Déclenché par                       |
 |  ┌─────────────────────────────────┐|
-|  │ [owner]                         │|
-|  │ Acces complet + gestion roles   │|
+|  │ Automatique (schedule)          │|
+|  │ ou                              │|
+|  │ admin@stadio.io                 │|
 |  └─────────────────────────────────┘|
 +--------------------------------------+
-|  Modifier le role                    |
+|  Données d'entrée                    |
 |  ┌─────────────────────────────────┐|
-|  │ ( ) Owner - Acces complet       │|
-|  │ ( ) Admin - Gestion complete    │|
-|  │ ( ) Editor - Gestion contenu    │|
-|  │ ( ) Support - Lecture seule     │|
+|  │ {                               │|
+|  │   "leagueIds": [1, 2, 3],       │|
+|  │   "dateFrom": "2026-01-26"      │|
+|  │ }                               │|
 |  └─────────────────────────────────┘|
 +--------------------------------------+
-|  [Retirer l'acces]  [Annuler] [Sauvegarder] |
+|  Données de sortie                   |
+|  ┌─────────────────────────────────┐|
+|  │ {                               │|
+|  │   "processed": 42,              │|
+|  │   "created": 12,                │|
+|  │   "updated": 30                 │|
+|  │ }                               │|
+|  └─────────────────────────────────┘|
 +--------------------------------------+
 ```
 
-### Dialog ajout admin
-
-```text
-+--------------------------------------+
-|  Ajouter un administrateur   [x]    |
-+--------------------------------------+
-|  Email de l'utilisateur              |
-|  [______________________________]    |
-|                                      |
-|  Role a attribuer                    |
-|  [Admin v]                           |
-|                                      |
-|  Note: L'utilisateur doit deja      |
-|  avoir un compte sur la plateforme. |
-|                                      |
-|  [Annuler]        [Ajouter]         |
-+--------------------------------------+
-```
-
-## Traductions a ajouter (i18n)
+## Traductions à ajouter (i18n)
 
 ```typescript
-users: {
-  title: "Utilisateurs & Roles",
-  subtitle: "Gestion des administrateurs",
-  description: "Gerez les acces et permissions des administrateurs",
-  newAdmin: "Nouvel admin",
+workflows: {
+  title: "Ops & Workflows",
+  subtitle: "Automatisations et jobs n8n",
+  description: "Gérez et déclenchez les workflows d'automatisation",
   
   // Stats
   stats: {
-    total: "Total",
-    owners: "Proprietaires",
-    admins: "Administrateurs",
-    editors: "Editeurs",
-    support: "Support",
+    total: "Total exécutions",
+    pending: "En attente",
+    running: "En cours",
+    success: "Succès",
+    failed: "Échecs",
+    avgDuration: "Durée moyenne",
+  },
+  
+  // Workflows
+  availableWorkflows: "Workflows disponibles",
+  trigger: "Déclencher",
+  triggering: "Déclenchement...",
+  triggerSuccess: "Workflow {{name}} déclenché avec succès",
+  triggerError: "Erreur lors du déclenchement",
+  lastRun: "Dernier run",
+  never: "Jamais",
+  ago: "il y a",
+  
+  // Définitions
+  definitions: {
+    importFixtures: "Import Fixtures",
+    importFixturesDesc: "Import des matchs depuis API-Sports",
+    recomputePricing: "Recalcul Pricing",
+    recomputePricingDesc: "Recalcule les prix de tous les événements",
+    rebuildLists: "Rebuild Listes",
+    rebuildListsDesc: "Reconstruit les listes éditoriales",
+    refreshNotoriety: "Refresh Notoriété",
+    refreshNotorietyDesc: "Met à jour les scores de notoriété",
+    sendNotifications: "Notifications",
+    sendNotificationsDesc: "Envoie les notifications push",
+  },
+  
+  // Historique
+  history: "Historique des exécutions",
+  workflow: "Workflow",
+  triggeredBy: "Déclenché par",
+  automatic: "Automatique",
+  status: "Statut",
+  duration: "Durée",
+  startedAt: "Démarré le",
+  finishedAt: "Terminé le",
+  
+  // Statuts
+  statuses: {
+    pending: "En attente",
+    running: "En cours",
+    success: "Succès",
+    failed: "Échec",
   },
   
   // Filtres
-  searchPlaceholder: "Rechercher par nom ou email...",
-  allRoles: "Tous les roles",
+  allWorkflows: "Tous les workflows",
+  allStatuses: "Tous les statuts",
   
-  // Roles
-  role: "Role",
-  roles: {
-    owner: "Proprietaire",
-    admin: "Administrateur",
-    editor: "Editeur",
-    support: "Support",
-  },
-  roleDescriptions: {
-    owner: "Acces complet + gestion des roles",
-    admin: "Gestion complete sauf roles",
-    editor: "Gestion du contenu editorial",
-    support: "Lecture seule",
-  },
+  // Détail
+  runDetail: "Détail de l'exécution",
+  workflowType: "Type",
+  inputData: "Données d'entrée",
+  outputData: "Données de sortie",
+  errorMessage: "Message d'erreur",
+  noData: "Aucune donnée",
   
-  // Actions
-  editRole: "Modifier le role",
-  removeAccess: "Retirer l'acces",
-  addAdmin: "Ajouter un administrateur",
-  memberSince: "Membre depuis",
-  currentRole: "Role actuel",
-  newRole: "Nouveau role",
+  // États vides
+  emptyTitle: "Aucune exécution",
+  emptyDescription: "Les exécutions de workflows apparaîtront ici.",
+  noResults: "Aucun résultat",
+  noResultsDescription: "Aucune exécution ne correspond à vos filtres.",
   
-  // Messages
-  updateSuccess: "Role mis a jour",
-  addSuccess: "Administrateur ajoute",
-  removeSuccess: "Acces retire",
-  cannotRemoveLastOwner: "Impossible de retirer le dernier proprietaire",
-  userNotFound: "Utilisateur non trouve",
-  userAlreadyAdmin: "Cet utilisateur est deja administrateur",
-  
-  // Etats vides
-  emptyTitle: "Aucun administrateur",
-  emptyDescription: "Ajoutez votre premier administrateur pour commencer.",
-  noResults: "Aucun resultat",
-  noResultsDescription: "Aucun utilisateur ne correspond a vos criteres.",
+  // Connexion n8n
+  n8nConnection: "Connexion n8n",
+  n8nConnected: "n8n connecté",
+  n8nDisconnected: "n8n non configuré",
+  n8nHint: "Configurez N8N_WEBHOOK_URL et N8N_WEBHOOK_SECRET",
   
   // Permissions
-  ownerOnly: "Action reservee aux proprietaires",
-  readOnly: "Vous avez un acces en lecture seule",
+  roleRequired: "Rôle requis: {{roles}}",
+  noPermission: "Vous n'avez pas les permissions pour déclencher ce workflow",
 }
 ```
 
-## Notes de securite
+## Sécurité et restrictions
 
-1. **Acces en ecriture** : Seuls les `owner` peuvent modifier les roles (RLS deja en place)
-2. **Protection dernier owner** : Verifier qu'il reste au moins un owner avant suppression
-3. **Pas d'auto-retrogradation** : Un owner ne peut pas retirer son propre role owner
-4. **Validation cote serveur** : Les RLS policies assurent la securite meme si le frontend est contourne
+1. **Permissions par workflow** : Chaque workflow a des rôles requis
+   - `import_fixtures`, `recompute_pricing`, `refresh_notoriety`, `send_notifications` : admin, owner
+   - `rebuild_editorial_lists` : editor, admin, owner
 
-## Ordre d'implementation
+2. **Validation côté serveur** : L'Edge Function `admin-n8n-trigger` vérifie les rôles
 
-### Etape 1 : Hooks (15 min)
-1. Creer `src/hooks/useUsers.ts` avec `useUsers` et `useUsersStats`
-2. Creer `src/hooks/useUserMutations.ts`
+3. **Audit automatique** : Chaque déclenchement est loggé dans `audit_log`
 
-### Etape 2 : Composants de base (20 min)
-1. Creer `UserStats.tsx`
-2. Creer `UserFilters.tsx`
-3. Reutiliser/adapter `RoleBadge.tsx` depuis audit
+## Ordre d'implémentation
 
-### Etape 3 : Tableau et lignes (15 min)
-1. Creer `UserTable.tsx`
-2. Creer `UserRow.tsx`
-3. Creer `UserEmptyState.tsx`
+### Étape 1 : Hooks (15 min)
+1. Créer `src/hooks/useWorkflows.ts` avec `useWorkflowRuns` et `useWorkflowsStats`
+2. Créer `src/hooks/useWorkflowMutations.ts` avec `useTriggerWorkflow`
 
-### Etape 4 : Panels et dialogs (20 min)
-1. Creer `UserDetailPanel.tsx`
-2. Creer `AddUserDialog.tsx`
+### Étape 2 : Composants de base (20 min)
+1. Créer `StatusBadge.tsx`
+2. Créer `WorkflowStats.tsx`
+3. Créer `WorkflowCard.tsx`
+4. Créer `WorkflowGrid.tsx`
 
-### Etape 5 : Page principale (10 min)
-1. Refondre `UsersPage.tsx`
+### Étape 3 : Tableau et historique (15 min)
+1. Créer `WorkflowRunsTable.tsx`
+2. Créer `WorkflowRunRow.tsx`
+3. Créer `WorkflowEmptyState.tsx`
+
+### Étape 4 : Panel de détail (10 min)
+1. Créer `WorkflowRunDetailPanel.tsx`
+
+### Étape 5 : Page principale (10 min)
+1. Refondre `WorkflowsPage.tsx`
 2. Ajouter traductions i18n
 
-### Etape 6 : Tests
-- Verifier l'affichage des utilisateurs
-- Tester la modification de role (en tant qu'owner)
-- Tester l'ajout d'un nouvel admin
-- Verifier les restrictions (non-owner ne peut pas modifier)
+### Étape 6 : Tests
+- Vérifier l'affichage des workflows disponibles
+- Tester le déclenchement manuel
+- Vérifier les restrictions de rôle
+- Tester l'affichage de l'historique
