@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "@/contexts/ThemeContext";
+import emblemBlanc from "@/assets/emblem-blanc.png";
+import emblemNoir from "@/assets/emblem-noir.png";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,6 +14,8 @@ import { Loader2 } from "lucide-react";
 export default function LoginPage() {
   const { t } = useTranslation();
   const { signIn, signUp } = useAuth();
+  const { resolvedTheme } = useTheme();
+  const logoSrc = resolvedTheme === "dark" ? emblemBlanc : emblemNoir;
   const { toast } = useToast();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -55,9 +60,11 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <div className="mx-auto mb-4 h-12 w-12 rounded-xl bg-primary flex items-center justify-center">
-            <span className="text-primary-foreground font-bold text-xl">S</span>
-          </div>
+          <img 
+            src={logoSrc} 
+            alt="Stadio" 
+            className="mx-auto mb-4 h-12 w-12 object-contain"
+          />
           <CardTitle className="text-2xl">Stadio Admin</CardTitle>
           <CardDescription>
             {isSignUp ? t("auth.createAccount") : t("auth.login")}
