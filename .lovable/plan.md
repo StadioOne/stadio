@@ -1,219 +1,352 @@
 
-# Plan : Implémentation complète de la page Journal d'Audit
+# Plan : Implémentation complète de la page Utilisateurs
 
 ## Contexte
 
-La page "Journal d'audit" (`/audit`) doit afficher l'historique complet des actions critiques effectuées par les administrateurs dans l'application Stadio Admin. Le système d'audit est déjà en place côté backend (table `audit_log` + Edge Function `admin-audit-log`), mais la page frontend est actuellement un placeholder vide.
+La page "Utilisateurs" (`/users`) permet de gérer les administrateurs de la plateforme Stadio Admin et leurs rôles (owner, admin, editor, support). Actuellement, la page est un placeholder vide. Le système de rôles est déjà en place dans la base de données avec les tables `profiles` et `user_roles`.
 
 ## Architecture existante
 
-### Backend (déjà implémenté)
-- **Table `audit_log`** : Stocke toutes les actions avec acteur, entité, action, diff avant/après, IP, user agent
-- **Edge Function `admin-audit-log`** : API GET avec filtres (entity, action, actorUserId, dateFrom, dateTo) et pagination
-- **Fonction `logAudit()`** : Utilisée par les autres Edge Functions pour enregistrer les actions
+### Base de données
+- **Table `profiles`** : Informations utilisateur (user_id, email, full_name, avatar_url, preferred_language)
+- **Table `user_roles`** : Attribution des rôles admin (user_id, role)
+- **Enum `admin_role`** : owner, admin, editor, support
+- **Fonctions RPC** : `is_admin()`, `has_role()`, `get_user_role()`
 
-### Données disponibles dans audit_log
-| Colonne | Description |
-|---------|-------------|
-| `actor_email` | Email de l'administrateur |
-| `actor_role` | Rôle (owner, admin, editor, support) |
-| `action` | Type d'action (publish, unpublish, update, create, delete, etc.) |
-| `entity` | Type d'entité (events, originals, categories, etc.) |
-| `entity_id` | UUID de l'entité concernée |
-| `old_values` | État avant modification (JSON) |
-| `new_values` | État après modification (JSON) |
-| `metadata` | Métadonnées additionnelles (JSON) |
-| `ip_address` | Adresse IP |
-| `created_at` | Horodatage |
+### Politiques RLS actuelles
+- `user_roles` : Seuls les `owner` peuvent gérer les rôles (INSERT/UPDATE/DELETE)
+- `profiles` : Les admins peuvent voir tous les profils
 
-## Fonctionnalités à implémenter
+### Données existantes
+Un seul utilisateur admin actuellement :
+- Email: wearestadio@gmail.com
+- Nom: MARQUES
+- Rôle: owner
 
-### 1. Vue principale avec tableau des logs
-- Affichage chronologique des entrées (les plus récentes en premier)
-- Colonnes : Date, Acteur, Action, Entité, Détails
-- Pagination (50 entrées par page)
-- Skeleton loading pendant le chargement
+## Fonctionnalités a implementer
 
-### 2. Filtres avancés
-- **Par période** : Sélecteur de dates (7j, 30j, 90j, personnalisé)
-- **Par acteur** : Dropdown des utilisateurs ayant des entrées
-- **Par action** : publish, unpublish, update, create, delete, etc.
-- **Par entité** : events, originals, categories, authors, etc.
-- **Recherche texte** : Recherche dans les métadonnées
+### 1. Vue principale avec liste des utilisateurs
+- Affichage en tableau avec colonnes : Avatar, Nom, Email, Role, Date d'ajout, Actions
+- Badge de role colore (owner=violet, admin=bleu, editor=vert, support=gris)
+- Pagination si necessaire
 
-### 3. Panel de détail
-- Clic sur une entrée ouvre un panel latéral
-- Affiche le diff complet avant/après
-- Affiche les métadonnées JSON formatées
-- Affiche IP et User Agent
+### 2. Statistiques
+- Total des administrateurs
+- Repartition par role (owners, admins, editors, support)
 
-### 4. Badges visuels
-- Badge de rôle coloré (owner=violet, admin=bleu, editor=vert, support=gris)
-- Badge d'action coloré (publish=vert, unpublish=orange, delete=rouge, update=bleu)
-- Badge d'entité avec icône correspondante
+### 3. Filtres
+- Recherche par nom/email
+- Filtre par role
 
-### 5. Export CSV (optionnel)
-- Bouton d'export des logs filtrés au format CSV
+### 4. Panel de detail/modification
+- Voir les informations de l'utilisateur
+- Modifier le role (seulement si l'utilisateur connecte est owner)
+- Pas de suppression de role pour le dernier owner
 
-## Fichiers à créer/modifier
+### 5. Ajout d'un nouvel admin
+- Recherche d'un utilisateur existant par email (depuis auth.users via profiles)
+- Attribution d'un role
+
+### 6. Restrictions de securite
+- Seuls les owners peuvent modifier/ajouter/supprimer des roles
+- Un owner ne peut pas retirer son propre role owner s'il est le dernier
+- Les autres roles (admin, editor, support) ont un acces en lecture seule
+
+## Fichiers a creer/modifier
 
 | Fichier | Action | Description |
 |---------|--------|-------------|
-| `src/pages/AuditLogPage.tsx` | Modifier | Page principale avec tableau et filtres |
-| `src/components/audit/AuditFilters.tsx` | Créer | Composant de filtres (période, acteur, action, entité) |
-| `src/components/audit/AuditTable.tsx` | Créer | Tableau des entrées d'audit |
-| `src/components/audit/AuditRow.tsx` | Créer | Ligne du tableau avec badges |
-| `src/components/audit/AuditDetailPanel.tsx` | Créer | Panel latéral de détail avec diff |
-| `src/components/audit/ActionBadge.tsx` | Créer | Badge coloré pour les actions |
-| `src/components/audit/EntityBadge.tsx` | Créer | Badge avec icône pour les entités |
-| `src/components/audit/RoleBadge.tsx` | Créer | Badge coloré pour les rôles |
-| `src/components/audit/DiffViewer.tsx` | Créer | Affichage du diff JSON avant/après |
-| `src/hooks/useAuditLogs.ts` | Créer | Hook React Query pour les logs d'audit |
-| `src/lib/api.ts` | Modifier | Corriger le client API pour audit |
-| `src/lib/i18n.ts` | Modifier | Ajouter traductions audit |
+| `src/hooks/useUsers.ts` | Creer | Hook React Query pour les utilisateurs avec roles |
+| `src/hooks/useUserMutations.ts` | Creer | Hook pour les mutations (ajout/modification de role) |
+| `src/pages/UsersPage.tsx` | Modifier | Page principale refondee |
+| `src/components/users/UserFilters.tsx` | Creer | Filtres (recherche, role) |
+| `src/components/users/UserStats.tsx` | Creer | Statistiques des utilisateurs |
+| `src/components/users/UserTable.tsx` | Creer | Tableau des utilisateurs |
+| `src/components/users/UserRow.tsx` | Creer | Ligne du tableau |
+| `src/components/users/UserDetailPanel.tsx` | Creer | Panel lateral de modification |
+| `src/components/users/UserEmptyState.tsx` | Creer | Etat vide |
+| `src/components/users/RoleBadge.tsx` | Creer | Badge de role (reutilisation du composant audit) |
+| `src/components/users/AddUserDialog.tsx` | Creer | Dialog pour ajouter un admin |
+| `src/lib/i18n.ts` | Modifier | Ajouter traductions users |
 
-## Détails techniques
+## Details techniques
 
-### Hook useAuditLogs
+### Types
 
 ```typescript
-interface AuditLogEntry {
-  id: string;
-  actorUserId: string | null;
-  actorEmail: string | null;
-  actorRole: string;
-  action: string;
-  entity: string;
-  entityId: string | null;
-  diff: {
-    before: Record<string, unknown> | null;
-    after: Record<string, unknown> | null;
-  };
-  metadata: Record<string, unknown> | null;
-  createdAt: string;
-  ipAddress: string | null;
+interface UserWithRole {
+  id: string;              // profile.id
+  userId: string;          // auth user id
+  email: string;
+  fullName: string | null;
+  avatarUrl: string | null;
+  role: AdminRole | null;  // null si pas encore de role
+  roleId: string | null;   // user_roles.id
+  createdAt: string;       // date d'ajout du role
 }
 
-interface AuditFilters {
-  entity?: string;
-  action?: string;
-  actorUserId?: string;
-  dateFrom?: string;
-  dateTo?: string;
-  limit?: number;
-  offset?: number;
+type AdminRole = 'owner' | 'admin' | 'editor' | 'support';
+
+interface UsersFilters {
+  search?: string;
+  role?: AdminRole | 'all';
+}
+
+interface UsersStats {
+  total: number;
+  owners: number;
+  admins: number;
+  editors: number;
+  support: number;
 }
 ```
 
-### Correction du client API
+### Hook useUsers
 
-L'API actuelle dans `src/lib/api.ts` ne gère pas correctement la réponse paginée. Il faut la corriger pour extraire `logs` et `pagination` de la réponse.
+```typescript
+// Requete jointe profiles + user_roles
+const { data, isLoading } = useQuery({
+  queryKey: ['admin-users', filters],
+  queryFn: async () => {
+    let query = supabase
+      .from('user_roles')
+      .select(`
+        id,
+        user_id,
+        role,
+        created_at,
+        profiles!inner(email, full_name, avatar_url)
+      `)
+      .order('created_at', { ascending: false });
+    
+    if (filters.role && filters.role !== 'all') {
+      query = query.eq('role', filters.role);
+    }
+    
+    // Recherche sur email ou nom
+    if (filters.search) {
+      query = query.or(`profiles.email.ilike.%${filters.search}%,profiles.full_name.ilike.%${filters.search}%`);
+    }
+    
+    return query;
+  }
+});
+```
 
-### Palette de couleurs pour les badges
+### Hook useUserMutations
 
-**Actions:**
-- `publish` : bg-green-100 text-green-800
-- `unpublish` : bg-orange-100 text-orange-800
-- `create` : bg-blue-100 text-blue-800
-- `update` : bg-sky-100 text-sky-800
-- `delete` : bg-red-100 text-red-800
-- autres : bg-gray-100 text-gray-800
+```typescript
+// Modifier le role d'un utilisateur
+const updateRole = useMutation({
+  mutationFn: async ({ roleId, newRole }: { roleId: string; newRole: AdminRole }) => {
+    return supabase
+      .from('user_roles')
+      .update({ role: newRole })
+      .eq('id', roleId);
+  }
+});
 
-**Entités:**
-- `events` : Calendar icon
-- `originals` : Film icon
-- `categories` : Folder icon
-- `authors` : User icon
-- `pricing` : DollarSign icon
-- `analytics` : BarChart icon
+// Supprimer le role (retirer l'acces admin)
+const removeRole = useMutation({
+  mutationFn: async (roleId: string) => {
+    return supabase
+      .from('user_roles')
+      .delete()
+      .eq('id', roleId);
+  }
+});
 
-**Rôles:**
-- `owner` : bg-purple-100 text-purple-800
-- `admin` : bg-blue-100 text-blue-800
-- `editor` : bg-green-100 text-green-800
-- `support` : bg-gray-100 text-gray-800
+// Ajouter un nouveau role
+const addRole = useMutation({
+  mutationFn: async ({ userId, role }: { userId: string; role: AdminRole }) => {
+    return supabase
+      .from('user_roles')
+      .insert({ user_id: userId, role });
+  }
+});
+```
 
-## Ordre d'implémentation
+### Hierarchie des roles
 
-### Étape 1 : Hook et API client (10 min)
-1. Créer `src/hooks/useAuditLogs.ts`
-2. Corriger `src/lib/api.ts` pour la réponse audit
-
-### Étape 2 : Composants de base (15 min)
-1. Créer les badges (Action, Entity, Role)
-2. Créer le DiffViewer
-
-### Étape 3 : Tableau et filtres (20 min)
-1. Créer AuditFilters
-2. Créer AuditTable + AuditRow
-
-### Étape 4 : Panel de détail (10 min)
-1. Créer AuditDetailPanel
-
-### Étape 5 : Page principale (10 min)
-1. Refondre AuditLogPage
-2. Ajouter traductions i18n
-
-### Étape 6 : Tests
-- Vérifier le chargement des logs
-- Tester les filtres
-- Tester l'ouverture du panel de détail
+```text
+owner (4)     - Acces complet, gestion des roles
+   |
+admin (3)     - Acces complet sauf gestion des roles
+   |
+editor (2)    - Gestion du contenu (events, originals, categories)
+   |
+support (1)   - Lecture seule
+```
 
 ## Maquette de l'interface
 
 ```text
 +------------------------------------------------------------------+
-|  Journal d'audit                              [7j] [30j] [90j]   |
-|  Historique des actions administratives                          |
+|  Utilisateurs & Roles                      [+ Nouvel admin]      |
+|  Gestion des administrateurs                                     |
 +------------------------------------------------------------------+
-|  [Tous les acteurs ▼] [Toutes les actions ▼] [Toutes les entités ▼] |
+|  [Total: 4]  [Owners: 1]  [Admins: 2]  [Editors: 1]  [Support: 0]|
++------------------------------------------------------------------+
+|  [Rechercher...]                    [Tous les roles v]           |
 +------------------------------------------------------------------+
 |                                                                   |
-|  Date           Acteur              Action    Entité    Détails   |
+|  Avatar  Nom              Email                Role      Actions  |
 |  ─────────────────────────────────────────────────────────────── |
-|  26 jan 17:30   admin@stadio.io    [publish] [events]  PSG vs OM |
-|                 [admin]                                           |
-|  ─────────────────────────────────────────────────────────────── |
-|  26 jan 16:45   editor@stadio.io   [update]  [originals] Article |
-|                 [editor]                                          |
-|  ─────────────────────────────────────────────────────────────── |
-|                                                                   |
-|  [< Précédent]  Page 1 sur 5  [Suivant >]                        |
+|  [M]     MARQUES          wearestadio@...     [owner]    [...]   |
+|  [J]     Jean Dupont      jean@stadio.io      [admin]    [...]   |
+|  [P]     Pierre Martin    pierre@stadio.io    [editor]   [...]   |
 +------------------------------------------------------------------+
 ```
 
-## Panel de détail (Sheet)
+### Panel de detail (Sheet)
 
 ```text
 +--------------------------------------+
-|  Détail de l'action         [×]     |
+|  Modifier le role           [x]     |
 +--------------------------------------+
-|  Action: publish                     |
-|  Entité: events                      |
-|  ID: 550e8400-e29b-41d4-a716-...    |
-+--------------------------------------+
-|  Acteur                              |
+|  Utilisateur                         |
 |  ┌─────────────────────────────────┐|
-|  │ admin@stadio.io                 │|
-|  │ Rôle: admin                     │|
-|  │ IP: 192.168.1.1                 │|
+|  │ [Avatar]                        │|
+|  │ MARQUES                         │|
+|  │ wearestadio@gmail.com           │|
+|  │ Membre depuis: 17 jan 2026      │|
 |  └─────────────────────────────────┘|
 +--------------------------------------+
-|  Modifications                       |
+|  Role actuel                         |
 |  ┌─────────────────────────────────┐|
-|  │ status: "draft" → "published"  │|
-|  │ published_at: null → "2026..."  │|
+|  │ [owner]                         │|
+|  │ Acces complet + gestion roles   │|
 |  └─────────────────────────────────┘|
 +--------------------------------------+
-|  Métadonnées                         |
+|  Modifier le role                    |
 |  ┌─────────────────────────────────┐|
-|  │ { "request_id": "abc123" }     │|
+|  │ ( ) Owner - Acces complet       │|
+|  │ ( ) Admin - Gestion complete    │|
+|  │ ( ) Editor - Gestion contenu    │|
+|  │ ( ) Support - Lecture seule     │|
 |  └─────────────────────────────────┘|
++--------------------------------------+
+|  [Retirer l'acces]  [Annuler] [Sauvegarder] |
 +--------------------------------------+
 ```
 
-## Notes de sécurité
+### Dialog ajout admin
 
-- Les logs d'audit sont accessibles en lecture seule (pas d'INSERT/UPDATE/DELETE depuis le frontend)
-- Les rôles `editor` ne voient que les logs des entités `events`, `originals`, `categories`
-- Les adresses IP et user agents sont masqués pour les rôles non-admin (optionnel)
+```text
++--------------------------------------+
+|  Ajouter un administrateur   [x]    |
++--------------------------------------+
+|  Email de l'utilisateur              |
+|  [______________________________]    |
+|                                      |
+|  Role a attribuer                    |
+|  [Admin v]                           |
+|                                      |
+|  Note: L'utilisateur doit deja      |
+|  avoir un compte sur la plateforme. |
+|                                      |
+|  [Annuler]        [Ajouter]         |
++--------------------------------------+
+```
+
+## Traductions a ajouter (i18n)
+
+```typescript
+users: {
+  title: "Utilisateurs & Roles",
+  subtitle: "Gestion des administrateurs",
+  description: "Gerez les acces et permissions des administrateurs",
+  newAdmin: "Nouvel admin",
+  
+  // Stats
+  stats: {
+    total: "Total",
+    owners: "Proprietaires",
+    admins: "Administrateurs",
+    editors: "Editeurs",
+    support: "Support",
+  },
+  
+  // Filtres
+  searchPlaceholder: "Rechercher par nom ou email...",
+  allRoles: "Tous les roles",
+  
+  // Roles
+  role: "Role",
+  roles: {
+    owner: "Proprietaire",
+    admin: "Administrateur",
+    editor: "Editeur",
+    support: "Support",
+  },
+  roleDescriptions: {
+    owner: "Acces complet + gestion des roles",
+    admin: "Gestion complete sauf roles",
+    editor: "Gestion du contenu editorial",
+    support: "Lecture seule",
+  },
+  
+  // Actions
+  editRole: "Modifier le role",
+  removeAccess: "Retirer l'acces",
+  addAdmin: "Ajouter un administrateur",
+  memberSince: "Membre depuis",
+  currentRole: "Role actuel",
+  newRole: "Nouveau role",
+  
+  // Messages
+  updateSuccess: "Role mis a jour",
+  addSuccess: "Administrateur ajoute",
+  removeSuccess: "Acces retire",
+  cannotRemoveLastOwner: "Impossible de retirer le dernier proprietaire",
+  userNotFound: "Utilisateur non trouve",
+  userAlreadyAdmin: "Cet utilisateur est deja administrateur",
+  
+  // Etats vides
+  emptyTitle: "Aucun administrateur",
+  emptyDescription: "Ajoutez votre premier administrateur pour commencer.",
+  noResults: "Aucun resultat",
+  noResultsDescription: "Aucun utilisateur ne correspond a vos criteres.",
+  
+  // Permissions
+  ownerOnly: "Action reservee aux proprietaires",
+  readOnly: "Vous avez un acces en lecture seule",
+}
+```
+
+## Notes de securite
+
+1. **Acces en ecriture** : Seuls les `owner` peuvent modifier les roles (RLS deja en place)
+2. **Protection dernier owner** : Verifier qu'il reste au moins un owner avant suppression
+3. **Pas d'auto-retrogradation** : Un owner ne peut pas retirer son propre role owner
+4. **Validation cote serveur** : Les RLS policies assurent la securite meme si le frontend est contourne
+
+## Ordre d'implementation
+
+### Etape 1 : Hooks (15 min)
+1. Creer `src/hooks/useUsers.ts` avec `useUsers` et `useUsersStats`
+2. Creer `src/hooks/useUserMutations.ts`
+
+### Etape 2 : Composants de base (20 min)
+1. Creer `UserStats.tsx`
+2. Creer `UserFilters.tsx`
+3. Reutiliser/adapter `RoleBadge.tsx` depuis audit
+
+### Etape 3 : Tableau et lignes (15 min)
+1. Creer `UserTable.tsx`
+2. Creer `UserRow.tsx`
+3. Creer `UserEmptyState.tsx`
+
+### Etape 4 : Panels et dialogs (20 min)
+1. Creer `UserDetailPanel.tsx`
+2. Creer `AddUserDialog.tsx`
+
+### Etape 5 : Page principale (10 min)
+1. Refondre `UsersPage.tsx`
+2. Ajouter traductions i18n
+
+### Etape 6 : Tests
+- Verifier l'affichage des utilisateurs
+- Tester la modification de role (en tant qu'owner)
+- Tester l'ajout d'un nouvel admin
+- Verifier les restrictions (non-owner ne peut pas modifier)
