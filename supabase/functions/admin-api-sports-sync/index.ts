@@ -522,6 +522,127 @@ Deno.serve(async (req) => {
         return successResponse(result);
       }
 
+      case 'import_games': {
+        if (!sport) {
+          return errorResponse('Sport is required for import', 400);
+        }
+        if (!body.gameIds || body.gameIds.length === 0) {
+          return errorResponse('gameIds are required', 400);
+        }
+        if (!leagueIds || leagueIds.length === 0) {
+          return errorResponse('leagueIds is required', 400);
+        }
+
+        // Get sport from database
+        const { data: sportData, error: sportError } = await supabase
+          .from('sports')
+          .select('id, name, name_fr')
+          .eq('slug', sport)
+          .single();
+
+        if (sportError || !sportData) {
+          return errorResponse(`Sport not found: ${sport}`, 404);
+        }
+
+        // Get league from database
+        const { data: leagueData } = await supabase
+          .from('leagues')
+          .select('id, name, external_id')
+          .eq('external_id', String(leagueIds[0]))
+          .eq('sport_id', sportData.id)
+          .single();
+
+        // Get games preview to get full details
+        const gamesResult = await getGamesPreview(sport, leagueIds[0], dateFrom || '', dateTo || '', season);
+        
+        if (gamesResult.errors && gamesResult.errors.length > 0) {
+          return errorResponse(gamesResult.errors.join(', '), 500);
+        }
+
+        // Filter only selected games
+        const selectedGames = gamesResult.games.filter((g: any) => body.gameIds?.includes(g.id));
+        
+        let created = 0;
+        let updated = 0;
+        const errors: string[] = [];
+
+        for (const game of selectedGames) {
+          // Build event title
+          const homeTeam = game.homeTeam?.name || 'TBD';
+          const awayTeam = game.awayTeam?.name || 'TBD';
+          const apiTitle = `${homeTeam} vs ${awayTeam}`;
+
+          // Prepare event data with status = 'catalog'
+          const eventData = {
+            external_id: String(game.id),
+            sport: sportData.name_fr || sportData.name,
+            sport_id: sportData.id,
+            league: game.league?.name || leagueData?.name || null,
+            league_id: leagueData?.id || null,
+            home_team: homeTeam,
+            away_team: awayTeam,
+            api_title: apiTitle,
+            event_date: game.date,
+            venue: game.venue || null,
+            round: game.league?.round || null,
+            match_status: game.status || null,
+            home_score: game.homeScore ?? null,
+            away_score: game.awayScore ?? null,
+            status: 'catalog', // Important: imported to catalog, not draft
+            is_live: false,
+            is_pinned: false,
+            last_sync_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          };
+
+          // Check if event already exists
+          const { data: existing } = await supabase
+            .from('events')
+            .select('id, status')
+            .eq('external_id', String(game.id))
+            .single();
+
+          if (existing) {
+            // Only update if still in catalog status
+            if (existing.status === 'catalog') {
+              const { error } = await supabase
+                .from('events')
+                .update(eventData)
+                .eq('id', existing.id);
+
+              if (error) {
+                errors.push(`Failed to update ${apiTitle}: ${error.message}`);
+              } else {
+                updated++;
+              }
+            }
+          } else {
+            // Insert new event
+            const { error } = await supabase
+              .from('events')
+              .insert({
+                ...eventData,
+                created_at: new Date().toISOString(),
+              });
+
+            if (error) {
+              errors.push(`Failed to create ${apiTitle}: ${error.message}`);
+            } else {
+              created++;
+            }
+          }
+        }
+
+        console.log(`[API-Sports] Import games: ${created} created, ${updated} updated`);
+
+        return successResponse({
+          created,
+          updated,
+          total: created + updated,
+          errors: errors.length > 0 ? errors : undefined,
+        });
+      }
+
       default:
         return errorResponse(`Unknown action: ${action}`, 400);
     }

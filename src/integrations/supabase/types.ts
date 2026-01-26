@@ -460,6 +460,8 @@ export type Database = {
           away_team: string | null
           away_team_id: string | null
           blocked_countries: string[] | null
+          broadcaster: string | null
+          broadcaster_logo_url: string | null
           created_at: string
           created_by: string | null
           event_date: string
@@ -496,6 +498,8 @@ export type Database = {
           away_team?: string | null
           away_team_id?: string | null
           blocked_countries?: string[] | null
+          broadcaster?: string | null
+          broadcaster_logo_url?: string | null
           created_at?: string
           created_by?: string | null
           event_date: string
@@ -532,6 +536,8 @@ export type Database = {
           away_team?: string | null
           away_team_id?: string | null
           blocked_countries?: string[] | null
+          broadcaster?: string | null
+          broadcaster_logo_url?: string | null
           created_at?: string
           created_by?: string | null
           event_date?: string
@@ -1113,7 +1119,7 @@ export type Database = {
     }
     Enums: {
       admin_role: "owner" | "admin" | "editor" | "support"
-      content_status: "draft" | "published" | "archived"
+      content_status: "catalog" | "draft" | "published" | "archived"
       original_type: "article" | "podcast" | "emission"
       pricing_tier: "gold" | "silver" | "bronze"
       workflow_status: "pending" | "running" | "success" | "failed"
@@ -1245,7 +1251,7 @@ export const Constants = {
   public: {
     Enums: {
       admin_role: ["owner", "admin", "editor", "support"],
-      content_status: ["draft", "published", "archived"],
+      content_status: ["catalog", "draft", "published", "archived"],
       original_type: ["article", "podcast", "emission"],
       pricing_tier: ["gold", "silver", "bronze"],
       workflow_status: ["pending", "running", "success", "failed"],
