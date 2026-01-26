@@ -142,24 +142,30 @@ export default function ApiSportsSettingsPage() {
   });
 
   // Fetch games preview
-  const { data: gamesData, isLoading: gamesLoading, refetch: refetchGames } = useQuery({
+  const { data: gamesData, isLoading: gamesLoading, refetch: refetchGames, error: gamesError } = useQuery({
     queryKey: ['games-preview', selectedSport?.slug, selectedLeagueId, dateFrom, dateTo],
     queryFn: async () => {
       const league = leagues.find(l => l.id === selectedLeagueId);
       if (!selectedSport || !league) return { games: [], errors: [] };
 
-      const result = await callSportSyncEndpoint({
+      // For football, season is required - for other sports, don't send it
+      const payload: Record<string, unknown> = {
         action: 'get_games_preview',
         sport: selectedSport.slug,
         leagueIds: [parseInt(league.external_id)],
         dateFrom: format(dateFrom, 'yyyy-MM-dd'),
         dateTo: format(dateTo, 'yyyy-MM-dd'),
-        season: league.season,
-      });
+      };
+      
+      // Only include season for football (required by API)
+      if (selectedSport.slug === 'football' && league.season) {
+        payload.season = league.season;
+      }
 
+      const result = await callSportSyncEndpoint(payload);
       return result.data as { games: Game[]; errors: string[] };
     },
-    enabled: !!selectedSport && !!selectedLeagueId && leagues.length > 0,
+    enabled: false, // Manual trigger only
   });
 
   // Import games mutation
@@ -443,17 +449,31 @@ export default function ApiSportsSettingsPage() {
             </div>
           </CardHeader>
           <CardContent>
+            {/* Display API errors if any */}
+            {gamesData?.errors && gamesData.errors.length > 0 && (
+              <div className="mb-4 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
+                <p className="text-sm font-medium text-destructive mb-1">Erreur API :</p>
+                {gamesData.errors.map((err, idx) => (
+                  <p key={idx} className="text-sm text-destructive/80">{err}</p>
+                ))}
+                {gamesData.errors.some(e => e.includes('season')) && (
+                  <p className="text-xs text-muted-foreground mt-2">
+                    💡 Le plan gratuit d'API-Sports limite l'accès aux saisons 2022-2024 pour le football.
+                  </p>
+                )}
+              </div>
+            )}
+            
             {gamesLoading ? (
               <div className="flex justify-center py-8">
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
               </div>
-            ) : games.length === 0 ? (
+            ) : games.length === 0 && (!gamesData?.errors || gamesData.errors.length === 0) ? (
               <div className="text-center py-8 text-muted-foreground">
                 <CalendarIcon className="h-12 w-12 mx-auto mb-3 opacity-30" />
-                <p>Aucun match trouvé pour cette période</p>
-                <p className="text-sm mt-1">Essayez d'élargir la plage de dates</p>
+                <p>Cliquez sur "Rechercher les matchs" pour charger les données</p>
               </div>
-            ) : (
+            ) : games.length === 0 ? null : (
               <>
                 {/* Selection header */}
                 <div className="flex items-center gap-4 mb-4 pb-3 border-b">
