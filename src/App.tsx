@@ -15,7 +15,7 @@ import OriginalsPage from "@/pages/OriginalsPage";
 import AuthorsPage from "@/pages/AuthorsPage";
 import UsersPage from "@/pages/UsersPage";
 import AuditLogPage from "@/pages/AuditLogPage";
-import WorkflowsPage from "@/pages/WorkflowsPage";
+import EdgeFunctionsPage from "@/pages/EdgeFunctionsPage";
 import AnalyticsPage from "@/pages/AnalyticsPage";
 import AnalyticsFixturesPage from "@/pages/AnalyticsFixturesPage";
 import AnalyticsOriginalsPage from "@/pages/AnalyticsOriginalsPage";
@@ -76,7 +76,7 @@ function AppRoutes() {
         <Route path="/authors" element={<AuthorsPage />} />
         <Route path="/users" element={<UsersPage />} />
         <Route path="/audit" element={<AuditLogPage />} />
-        <Route path="/workflows" element={<WorkflowsPage />} />
+        <Route path="/edge-functions" element={<EdgeFunctionsPage />} />
         <Route path="/analytics" element={<AnalyticsPage />} />
         <Route path="/analytics/fixtures" element={<AnalyticsFixturesPage />} />
         <Route path="/analytics/originals" element={<AnalyticsOriginalsPage />} />

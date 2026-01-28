@@ -12,7 +12,7 @@ import {
   FileText,
   Users,
   ClipboardList,
-  Workflow,
+  Server,
   BarChart3,
   PenTool,
   ChevronDown,
@@ -59,7 +59,7 @@ const contentNavItems = [
 const adminNavItems = [
   { key: "users", path: "/users", icon: Users },
   { key: "auditLog", path: "/audit", icon: ClipboardList },
-  { key: "workflows", path: "/workflows", icon: Workflow },
+  { key: "edgeFunctions", path: "/edge-functions", icon: Server },
 ];
 
 const analyticsSubItems = [
