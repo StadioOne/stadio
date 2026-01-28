@@ -28,6 +28,7 @@ export function useN8nWorkflows() {
       if (!session) throw new Error('Not authenticated');
 
       const response = await supabase.functions.invoke<N8nWorkflowsResponse>('admin-n8n-workflows', {
+        method: 'GET',
         headers: {
           Authorization: `Bearer ${session.access_token}`,
         },
