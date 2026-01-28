@@ -6,7 +6,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { WORKFLOW_DEFINITIONS } from './WorkflowGrid';
+import { useN8nWorkflows } from '@/hooks/useN8nWorkflows';
 import type { WorkflowStatus, WorkflowsFilters } from '@/hooks/useWorkflows';
 
 interface WorkflowFiltersProps {
@@ -24,6 +24,7 @@ const STATUS_OPTIONS: (WorkflowStatus | 'all')[] = [
 
 export function WorkflowFilters({ filters, onFiltersChange }: WorkflowFiltersProps) {
   const { t } = useTranslation();
+  const { data: workflows } = useN8nWorkflows();
 
   return (
     <div className="flex flex-col sm:flex-row gap-4">
@@ -42,9 +43,9 @@ export function WorkflowFilters({ filters, onFiltersChange }: WorkflowFiltersPro
         </SelectTrigger>
         <SelectContent className="bg-background border">
           <SelectItem value="all">{t('workflows.allWorkflows')}</SelectItem>
-          {WORKFLOW_DEFINITIONS.map((def) => (
-            <SelectItem key={def.id} value={def.id}>
-              {t(def.nameKey, { defaultValue: def.name })}
+          {workflows?.map((workflow) => (
+            <SelectItem key={workflow.id} value={workflow.name}>
+              {workflow.name.replace(/^[^\w\s]+\s*/, '')}
             </SelectItem>
           ))}
         </SelectContent>
