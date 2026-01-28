@@ -38,3 +38,21 @@ verify_jwt = false
 
 [functions.admin-api-football-sync]
 verify_jwt = false
+
+[functions.admin-api-sports-sync]
+verify_jwt = false
+
+[functions.admin-analytics-overview]
+verify_jwt = false
+
+[functions.admin-analytics-fixtures]
+verify_jwt = false
+
+[functions.admin-analytics-originals]
+verify_jwt = false
+
+[functions.admin-analytics-geo]
+verify_jwt = false
+
+[functions.public-events-api]
+verify_jwt = false
