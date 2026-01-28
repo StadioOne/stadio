@@ -498,6 +498,11 @@ const fr = {
     // Connexion n8n
     n8nConnection: "Connexion n8n",
     n8nConnected: "n8n connecté",
+    active: "Actif",
+    inactive: "Inactif",
+    lastUpdated: "Mis à jour",
+    fetchError: "Erreur lors du chargement des workflows",
+    noWorkflows: "Aucun workflow configuré sur n8n",
     n8nDisconnected: "n8n non configuré",
     // Permissions
     roleRequired: "Rôle requis: {{roles}}",
@@ -1017,6 +1022,12 @@ const en = {
     n8nConnection: "n8n connection",
     n8nConnected: "n8n connected",
     n8nDisconnected: "n8n not configured",
+    // New keys
+    active: "Active",
+    inactive: "Inactive",
+    lastUpdated: "Last updated",
+    fetchError: "Error loading workflows",
+    noWorkflows: "No workflows configured in n8n",
     // Permissions
     roleRequired: "Required role: {{roles}}",
     noPermission: "You don't have permission to trigger this workflow",
