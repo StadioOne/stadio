@@ -36,6 +36,12 @@ export interface PricingRecomputeParams {
   isManualOverride?: boolean;
 }
 
+export interface EventPricingUpdate {
+  manual_price?: number | null;
+  manual_tier?: PricingTier | null;
+  is_manual_override: boolean;
+}
+
 // Original content types
 export type Original = Database['public']['Tables']['originals']['Row'];
 export type OriginalType = Database['public']['Enums']['original_type'];

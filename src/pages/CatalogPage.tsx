@@ -159,20 +159,24 @@ export default function CatalogPage() {
       
       if (eventError) throw eventError;
 
-      // Create pricing entry if manual values are set
-      if (editForm.manual_price || editForm.manual_tier) {
-        const { error: pricingError } = await supabase
-          .from('event_pricing')
-          .upsert({
-            event_id: eventId,
-            manual_price: editForm.manual_price ? parseFloat(editForm.manual_price) : null,
-            manual_tier: editForm.manual_tier || null,
-            is_manual_override: !!(editForm.manual_price || editForm.manual_tier),
-            updated_at: new Date().toISOString(),
-          }, { onConflict: 'event_id' });
-        
-        if (pricingError) throw pricingError;
-      }
+      // Always create/update pricing entry
+      const hasManualValues = !!(editForm.manual_price || editForm.manual_tier);
+      const manualPriceValue = editForm.manual_price ? parseFloat(editForm.manual_price) : null;
+      
+      const { error: pricingError } = await supabase
+        .from('event_pricing')
+        .upsert({
+          event_id: eventId,
+          manual_price: manualPriceValue,
+          manual_tier: editForm.manual_tier || null,
+          // Set computed values equal to manual values when manual override is active
+          computed_price: hasManualValues ? manualPriceValue : null,
+          computed_tier: hasManualValues ? (editForm.manual_tier || null) : null,
+          is_manual_override: hasManualValues,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'event_id' });
+      
+      if (pricingError) throw pricingError;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['catalog-events'] });
