@@ -23,6 +23,8 @@ import {
   usePublishEvent,
   useUnpublishEvent,
   useUpdateEvent,
+  useUpdateEventPricing,
+  useRecomputeEventPricing,
   useToggleLive,
   useTogglePinned,
 } from '@/hooks/useEventMutations';
@@ -32,6 +34,7 @@ import { EventCard } from '@/components/events/EventCard';
 import { EventRow } from '@/components/events/EventRow';
 import { EventsEmptyState } from '@/components/events/EventsEmptyState';
 import { EventDetailPanel } from '@/components/events/EventDetailPanel';
+import type { EventPricingUpdate } from '@/lib/api-types';
 
 const ITEMS_PER_PAGE = 20;
 
@@ -53,6 +56,8 @@ export default function EventsPage() {
   const publishMutation = usePublishEvent();
   const unpublishMutation = useUnpublishEvent();
   const updateMutation = useUpdateEvent();
+  const updatePricingMutation = useUpdateEventPricing();
+  const recomputePricingMutation = useRecomputeEventPricing();
   const toggleLiveMutation = useToggleLive();
   const togglePinnedMutation = useTogglePinned();
 
@@ -94,10 +99,16 @@ export default function EventsPage() {
   }, [togglePinnedMutation]);
 
   const handleSaveEvent = useCallback((id: string, eventData: any) => {
-    updateMutation.mutate({ id, data: eventData }, {
-      onSuccess: () => setSelectedEvent(null),
-    });
+    updateMutation.mutate({ id, data: eventData });
   }, [updateMutation]);
+
+  const handleUpdatePricing = useCallback((eventId: string, data: EventPricingUpdate) => {
+    updatePricingMutation.mutate({ eventId, data });
+  }, [updatePricingMutation]);
+
+  const handleRecomputePricing = useCallback((eventId: string) => {
+    recomputePricingMutation.mutate(eventId);
+  }, [recomputePricingMutation]);
 
   const handleClearFilters = useCallback(() => {
     setFilters({ limit: ITEMS_PER_PAGE, offset: 0 });
@@ -268,9 +279,12 @@ export default function EventsPage() {
         open={!!selectedEvent}
         onOpenChange={(open) => !open && setSelectedEvent(null)}
         onSave={handleSaveEvent}
+        onUpdatePricing={handleUpdatePricing}
+        onRecomputePricing={handleRecomputePricing}
         onPublish={handlePublish}
         onUnpublish={handleUnpublish}
-        isSaving={updateMutation.isPending}
+        isSaving={updateMutation.isPending || updatePricingMutation.isPending}
+        isRecomputing={recomputePricingMutation.isPending}
       />
     </div>
   );

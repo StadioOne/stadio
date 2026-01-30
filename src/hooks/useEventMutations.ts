@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { adminApi, handleApiError } from '@/lib/api';
 import { eventQueryKeys } from './useEvents';
-import type { EventUpdate } from '@/lib/api-types';
+import type { EventUpdate, EventPricingUpdate } from '@/lib/api-types';
 
 export function usePublishEvent() {
   const queryClient = useQueryClient();
@@ -60,6 +60,57 @@ export function useUpdateEvent() {
       queryClient.invalidateQueries({ queryKey: eventQueryKeys.all });
       queryClient.invalidateQueries({ queryKey: eventQueryKeys.detail(id) });
       toast.success(t('events.updateSuccess', 'Événement mis à jour'));
+    },
+    onError: (error) => {
+      toast.error(handleApiError(error));
+    },
+  });
+}
+
+export function useUpdateEventPricing() {
+  const queryClient = useQueryClient();
+  const { t } = useTranslation();
+
+  return useMutation({
+    mutationFn: async ({ eventId, data }: { eventId: string; data: EventPricingUpdate }) => {
+      const { data: updated, error } = await supabase
+        .from('event_pricing')
+        .upsert({
+          event_id: eventId,
+          manual_price: data.manual_price,
+          manual_tier: data.manual_tier,
+          is_manual_override: data.is_manual_override,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'event_id' })
+        .select()
+        .single();
+
+      if (error) throw error;
+      return updated;
+    },
+    onSuccess: (_, { eventId }) => {
+      queryClient.invalidateQueries({ queryKey: eventQueryKeys.all });
+      queryClient.invalidateQueries({ queryKey: eventQueryKeys.detail(eventId) });
+      toast.success(t('events.pricingUpdated', 'Tarification mise à jour'));
+    },
+    onError: (error) => {
+      toast.error(handleApiError(error));
+    },
+  });
+}
+
+export function useRecomputeEventPricing() {
+  const queryClient = useQueryClient();
+  const { t } = useTranslation();
+
+  return useMutation({
+    mutationFn: async (eventId: string) => {
+      return adminApi.pricing.recompute({ eventId });
+    },
+    onSuccess: (_, eventId) => {
+      queryClient.invalidateQueries({ queryKey: eventQueryKeys.all });
+      queryClient.invalidateQueries({ queryKey: eventQueryKeys.detail(eventId) });
+      toast.success(t('events.pricingRecomputed', 'Prix recalculé'));
     },
     onError: (error) => {
       toast.error(handleApiError(error));
