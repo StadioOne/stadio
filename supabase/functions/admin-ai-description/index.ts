@@ -122,7 +122,17 @@ Recherche sur le web les dernières informations sur ces équipes/joueurs pour e
           type: 'function',
           function: {
             name: 'web_search',
-            description: 'Search the web for current information about teams, players, and match context'
+            description: 'Search the web for current information about teams, players, and match context',
+            parameters: {
+              type: 'object',
+              properties: {
+                query: {
+                  type: 'string',
+                  description: 'The search query'
+                }
+              },
+              required: ['query']
+            }
           }
         }],
         tool_choice: 'auto',
