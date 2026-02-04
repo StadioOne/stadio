@@ -252,7 +252,7 @@ export default function CatalogPage() {
     
     parts.push(
       'Style: dynamique, couleurs vives, ambiance de stade',
-      'format horizontal 16:9, qualité professionnelle',
+      'format VERTICAL portrait 9:16, qualité professionnelle',
       'sans texte ni logo'
     );
     
