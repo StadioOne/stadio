@@ -73,7 +73,7 @@ export function BroadcasterDetailPanel({
           </TabsList>
 
           <TabsContent value="rights" className="mt-4">
-            <RightsTab broadcasterId={broadcaster.id} />
+            <RightsTab broadcasterId={broadcaster.id} broadcasterName={broadcaster.name} />
           </TabsContent>
 
           <TabsContent value="packages" className="mt-4">

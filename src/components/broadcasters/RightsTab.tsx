@@ -14,18 +14,23 @@ import {
 import { RightsFilters } from './RightsFilters';
 import { RightsTable } from './RightsTable';
 import { RightsStatsCards } from './RightsStatsCards';
+import { RightsBulkDialog } from './RightsBulkDialog';
 import { useRightsEvents, useRightsStats, type RightsExclusivity, type RightsStatus, type RightWithEvent } from '@/hooks/useRightsEvents';
 import { useRightsMutations } from '@/hooks/useRightsMutations';
 
 interface RightsTabProps {
   broadcasterId: string;
+  broadcasterName: string;
 }
 
-export function RightsTab({ broadcasterId }: RightsTabProps) {
+export function RightsTab({ broadcasterId, broadcasterName }: RightsTabProps) {
   // Filters
   const [search, setSearch] = useState('');
   const [exclusivity, setExclusivity] = useState<RightsExclusivity | 'all'>('all');
   const [status, setStatus] = useState<RightsStatus | 'all'>('all');
+
+  // Dialogs
+  const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
 
   // Actions
   const [revokeTarget, setRevokeTarget] = useState<RightWithEvent | null>(null);
@@ -73,11 +78,19 @@ export function RightsTab({ broadcasterId }: RightsTabProps) {
           status={status}
           onStatusChange={setStatus}
         />
-        <Button size="sm" className="shrink-0">
+        <Button size="sm" className="shrink-0" onClick={() => setBulkDialogOpen(true)}>
           <Plus className="h-4 w-4 mr-2" />
           Attribution en masse
         </Button>
       </div>
+
+      {/* Bulk assignment dialog */}
+      <RightsBulkDialog
+        broadcasterId={broadcasterId}
+        broadcasterName={broadcasterName}
+        open={bulkDialogOpen}
+        onOpenChange={setBulkDialogOpen}
+      />
 
       {/* Table */}
       <RightsTable
