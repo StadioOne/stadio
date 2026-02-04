@@ -50,6 +50,7 @@ import {
   Trophy,
   Search,
   Filter,
+  Sparkles,
 } from "lucide-react";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -99,6 +100,7 @@ export default function CatalogPage() {
     manual_price: "",
     manual_tier: "" as PricingTier | "",
   });
+  const [isGeneratingDescription, setIsGeneratingDescription] = useState(false);
 
   // Fetch all sports
   const { data: sports = [] } = useQuery({
@@ -274,6 +276,58 @@ export default function CatalogPage() {
         broadcaster_logo_url: editForm.broadcaster_logo_url || null,
       },
     });
+  };
+
+  const handleGenerateDescription = async () => {
+    if (!selectedEvent) return;
+
+    setIsGeneratingDescription(true);
+    try {
+      const session = await supabase.auth.getSession();
+      if (!session.data.session) {
+        toast.error('Non authentifié');
+        return;
+      }
+
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-ai-description`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.data.session.access_token}`,
+          },
+          body: JSON.stringify({
+            event: {
+              sport: selectedEvent.sport,
+              league: selectedEvent.league,
+              home_team: selectedEvent.home_team,
+              away_team: selectedEvent.away_team,
+              event_date: selectedEvent.event_date,
+              venue: selectedEvent.venue,
+              round: selectedEvent.round,
+            },
+          }),
+        }
+      );
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Erreur lors de la génération');
+      }
+
+      setEditForm(prev => ({
+        ...prev,
+        override_description: result.data.description,
+      }));
+      toast.success('Description générée avec succès');
+    } catch (error) {
+      console.error('Error generating description:', error);
+      toast.error(error instanceof Error ? error.message : 'Erreur lors de la génération');
+    } finally {
+      setIsGeneratingDescription(false);
+    }
   };
 
   // Group events by sport
@@ -517,7 +571,29 @@ export default function CatalogPage() {
 
             {/* Description */}
             <div className="space-y-2">
-              <Label htmlFor="override_description">Description</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="override_description">Description</Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleGenerateDescription}
+                  disabled={isGeneratingDescription}
+                  className="gap-1.5"
+                >
+                  {isGeneratingDescription ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Génération...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="h-3.5 w-3.5" />
+                      Générer avec IA
+                    </>
+                  )}
+                </Button>
+              </div>
               <Textarea
                 id="override_description"
                 placeholder="Description de l'événement pour les utilisateurs..."

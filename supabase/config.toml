@@ -59,3 +59,6 @@ verify_jwt = false
 
 [functions.admin-rights-resolve]
 verify_jwt = false
+
+[functions.admin-ai-description]
+verify_jwt = false
