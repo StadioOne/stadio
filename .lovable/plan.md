@@ -1,232 +1,102 @@
 
-# Plan : Génération d'images IA avec Lovable AI (Nano Banana Pro)
+# Plan : Correction de la double notification lors de la publication d'un événement
 
-## Objectif
+## Problème identifié
 
-Ajouter un générateur d'images IA dans le configurateur d'événements du catalogue. L'utilisateur pourra :
-1. Rédiger/modifier un prompt décrivant l'image souhaitée
-2. Générer l'image via IA (Google Gemini Image)
-3. L'image sera uploadée dans le storage et l'URL mise à jour automatiquement
+Lors de la publication d'un événement depuis le configurateur du catalogue, l'utilisateur voit **deux notifications** (toasts) qui apparaissent :
 
-## Bonne nouvelle 🎉
+1. **"Événement mis à jour"** - de la mutation `updateEventMutation`
+2. **"Événement envoyé vers la page Événements"** - de la mutation `promoteToDraftMutation`
 
-Le projet dispose déjà de `LOVABLE_API_KEY` configuré, ce qui permet d'utiliser **Lovable AI** avec le modèle `google/gemini-3-pro-image-preview` (Nano Banana Pro) pour la génération d'images **sans clé API supplémentaire**.
+Cela crée de la confusion car l'utilisateur peut interpréter la première notification comme une erreur, surtout si les deux apparaissent rapidement.
 
-## Architecture technique
+## Cause technique
 
 ```text
-┌─────────────────────────────────────────────────────────────────────┐
-│                      Frontend (CatalogPage)                          │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                     │
-│  ┌─────────────────────────────────────────────────────────────┐    │
-│  │ Image de l'événement                [✨ Générer avec IA]    │    │
-│  │ ┌─────────────────────────────────────────────────────────┐ │    │
-│  │ │ Prompt: "Affiche dynamique match PSG vs OM, stade,     │ │    │
-│  │ │ ambiance nocturne, style moderne"                       │ │    │
-│  │ └─────────────────────────────────────────────────────────┘ │    │
-│  │ ┌─────────────────────────────────────────────────────────┐ │    │
-│  │ │ [Preview de l'image générée]                           │ │    │
-│  │ └─────────────────────────────────────────────────────────┘ │    │
-│  └─────────────────────────────────────────────────────────────┘    │
-│                               │                                     │
-│                               ▼                                     │
-│                    Appel Edge Function                              │
-└─────────────────────────────────────────────────────────────────────┘
-                                │
-                                ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│              Edge Function: admin-ai-image                           │
-├─────────────────────────────────────────────────────────────────────┤
-│ 1. Reçoit le prompt personnalisé                                    │
-│ 2. Appelle Lovable AI (google/gemini-3-pro-image-preview)           │
-│ 3. Décode l'image base64 retournée                                  │
-│ 4. Upload vers Supabase Storage (bucket event-images)               │
-│ 5. Retourne l'URL publique de l'image                               │
-└─────────────────────────────────────────────────────────────────────┘
-                                │
-                                ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                      Lovable AI Gateway                              │
-├─────────────────────────────────────────────────────────────────────┤
-│ Modèle: google/gemini-3-pro-image-preview                           │
-│ Retourne: image base64 + texte                                      │
-└─────────────────────────────────────────────────────────────────────┘
+handleSaveAndPromote()
+    │
+    ├── 1. updateEventMutation.mutateAsync()
+    │       └── onSuccess → toast.success("Événement mis à jour") ❌
+    │
+    └── 2. promoteToDraftMutation.mutateAsync()
+            └── onSuccess → toast.success("Événement envoyé...") ✓
 ```
 
-## Fichiers à créer/modifier
+Les deux mutations ont leurs propres callbacks `onSuccess` qui affichent des toasts. Même en utilisant `mutateAsync()` (qui attend la fin), les callbacks sont toujours déclenchés.
 
-| Fichier | Action | Description |
-|---------|--------|-------------|
-| `supabase/functions/admin-ai-image/index.ts` | Créer | Edge Function pour générer et stocker l'image |
-| `supabase/config.toml` | Modifier | Ajouter configuration de la fonction |
-| `src/pages/CatalogPage.tsx` | Modifier | Interface de génération d'image avec prompt éditable |
-| Migration SQL | Créer | Bucket storage `event-images` avec politiques RLS |
+## Solution proposée
 
-## Détails d'implémentation
+Modifier la logique `handleSaveAndPromote` pour :
+1. **Supprimer le toast** de `updateEventMutation` quand appelé dans le contexte de "save and promote"
+2. Afficher **un seul toast** à la fin de l'opération complète
 
-### 1. Bucket Storage `event-images`
+### Approche technique
 
-```sql
--- Créer le bucket pour les images d'événements
-INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-VALUES ('event-images', 'event-images', true, 10485760, ARRAY['image/png', 'image/jpeg', 'image/webp']);
+Utiliser un flag de contexte ou modifier les handlers pour distinguer les deux cas d'usage :
+- **Enregistrer seul** → affiche "Événement mis à jour"
+- **Enregistrer + Promouvoir** → affiche uniquement "Événement envoyé vers la page Événements"
 
--- Politique: lecture publique
-CREATE POLICY "Public read access for event images"
-ON storage.objects FOR SELECT
-USING (bucket_id = 'event-images');
+## Fichiers à modifier
 
--- Politique: admins peuvent uploader
-CREATE POLICY "Admins can upload event images"
-ON storage.objects FOR INSERT
-WITH CHECK (
-  bucket_id = 'event-images' 
-  AND EXISTS (
-    SELECT 1 FROM admin_users 
-    WHERE user_id = auth.uid() AND status = 'active'
-  )
-);
-```
+| Fichier | Modification |
+|---------|--------------|
+| `src/pages/CatalogPage.tsx` | Refactoriser les mutations pour un seul toast lors de la promotion |
+| `src/components/api-sports/CatalogTab.tsx` | Appliquer la même correction |
 
-### 2. Edge Function `admin-ai-image`
+## Implémentation détaillée
 
-**Endpoint :** POST `/functions/v1/admin-ai-image`
+### Option retenue : Mutation silencieuse avec try/catch
 
-**Input :**
-```json
-{
-  "prompt": "Affiche dynamique pour le match PSG vs Olympique de Marseille...",
-  "eventId": "uuid-de-l-evenement"
-}
-```
-
-**Logique :**
-```text
-1. Valider l'authentification admin
-2. Construire le prompt enrichi pour la génération
-3. Appeler Lovable AI Gateway:
-   - URL: https://ai.gateway.lovable.dev/v1/chat/completions
-   - Model: google/gemini-3-pro-image-preview
-   - modalities: ["image", "text"]
-4. Extraire l'image base64 de la réponse
-5. Décoder et uploader vers storage/event-images/{eventId}.png
-6. Retourner l'URL publique
-```
-
-**Appel Lovable AI :**
-```typescript
-const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-  method: 'POST',
-  headers: {
-    'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-    'Content-Type': 'application/json',
-  },
-  body: JSON.stringify({
-    model: 'google/gemini-3-pro-image-preview',
-    messages: [{
-      role: 'user',
-      content: prompt
-    }],
-    modalities: ['image', 'text']
-  })
-});
-
-// Réponse attendue:
-// data.choices[0].message.images[0].image_url.url = "data:image/png;base64,..."
-```
-
-### 3. Interface utilisateur (CatalogPage.tsx)
-
-**Remplacement de la section Image URL :**
-
-```text
-┌────────────────────────────────────────────────────────────────┐
-│ Image de l'événement                                           │
-├────────────────────────────────────────────────────────────────┤
-│ ┌────────────────────────────────────────────────────────────┐ │
-│ │ Prompt pour l'IA (modifiable)                              │ │
-│ │ ┌────────────────────────────────────────────────────────┐ │ │
-│ │ │ Affiche dynamique pour le match de football PSG vs    │ │ │
-│ │ │ Olympique de Marseille, stade illuminé, ambiance      │ │ │
-│ │ │ nocturne, style moderne et professionnel              │ │ │
-│ │ └────────────────────────────────────────────────────────┘ │ │
-│ │                                                            │ │
-│ │ ┌─────────────────────┐  ┌────────────────────────────┐   │ │
-│ │ │ ✨ Générer l'image  │  │ 🔗 Ou utiliser une URL     │   │ │
-│ │ └─────────────────────┘  └────────────────────────────┘   │ │
-│ └────────────────────────────────────────────────────────────┘ │
-│                                                                │
-│ ┌────────────────────────────────────────────────────────────┐ │
-│ │                                                            │ │
-│ │              [Preview de l'image]                         │ │
-│ │                   1024 x 1024                              │ │
-│ │                                                            │ │
-│ └────────────────────────────────────────────────────────────┘ │
-│                                                                │
-│ URL: https://xxx.supabase.co/storage/v1/object/public/...     │
-└────────────────────────────────────────────────────────────────┘
-```
-
-**Fonctionnalités :**
-- Prompt pré-rempli automatiquement basé sur les données de l'événement
-- Textarea éditable pour personnaliser le prompt
-- Bouton "Générer l'image" avec état de chargement
-- Toggle pour basculer vers saisie manuelle d'URL si préféré
-- Preview de l'image générée
-- URL affichée et copiable
-
-### 4. Génération automatique du prompt initial
-
-Lors de l'ouverture du configurateur, un prompt par défaut est généré :
+Remplacer l'appel `mutateAsync` par une version silencieuse qui ne déclenche pas le toast :
 
 ```typescript
-const generateDefaultPrompt = (event: CatalogEvent) => {
-  const parts = [
-    `Affiche promotionnelle moderne pour un match de ${event.sport}`,
-  ];
-  
-  if (event.home_team && event.away_team) {
-    parts.push(`entre ${event.home_team} et ${event.away_team}`);
+const handleSaveAndPromote = async () => {
+  if (!selectedEvent) return;
+
+  try {
+    // 1. Mise à jour silencieuse (sans toast)
+    const { error: updateError } = await supabase
+      .from('events')
+      .update({
+        override_title: editForm.override_title || null,
+        override_description: editForm.override_description || null,
+        override_image_url: editForm.override_image_url || null,
+        broadcaster: editForm.broadcaster || null,
+        broadcaster_logo_url: editForm.broadcaster_logo_url || null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', selectedEvent.id);
+
+    if (updateError) throw updateError;
+
+    // 2. Promotion vers draft
+    await promoteToDraftMutation.mutateAsync(selectedEvent.id);
+    
+    // Le toast de succès est géré par promoteToDraftMutation.onSuccess
+    
+  } catch (error) {
+    toast.error(error instanceof Error ? error.message : 'Erreur lors de la publication');
   }
-  
-  if (event.league) {
-    parts.push(`en ${event.league}`);
-  }
-  
-  parts.push(
-    'Style: dynamique, couleurs vives, ambiance de stade,',
-    'format horizontal 16:9, qualité professionnelle,',
-    'sans texte ni logo'
-  );
-  
-  return parts.join('. ');
 };
 ```
 
-## États UI
+Cette approche :
+- N'utilise PAS `updateEventMutation.mutateAsync()` pour éviter son toast
+- Fait l'update directement avec Supabase
+- Garde le toast final de `promoteToDraftMutation`
+- Gère les erreurs avec un seul message
 
-| État | Interface |
-|------|-----------|
-| Idle | Prompt pré-rempli, bouton "Générer" actif |
-| Loading | Bouton désactivé + spinner + "Génération en cours..." |
-| Succès | Image affichée, URL mise à jour, toast de confirmation |
-| Erreur | Toast d'erreur, bouton réactivé pour retry |
+## Changements UI
 
-## Sécurité
+| Avant | Après |
+|-------|-------|
+| Toast 1: "Événement mis à jour" | (rien) |
+| Toast 2: "Événement envoyé vers la page Événements" | Toast unique: "Événement envoyé vers la page Événements" |
 
-- Edge Function protégée par authentification admin
-- `LOVABLE_API_KEY` jamais exposée côté client
-- Bucket storage avec RLS : lecture publique, écriture admin uniquement
-- Images nommées par `eventId` pour éviter les conflits
+## Tests à effectuer
 
-## UX Flow
-
-1. L'admin ouvre le sheet de configuration d'un événement
-2. Un prompt par défaut est généré automatiquement basé sur les infos du match
-3. L'admin peut modifier le prompt selon ses besoins
-4. Il clique sur "Générer l'image"
-5. Spinner pendant 5-10 secondes (génération + upload)
-6. L'image apparaît en preview avec son URL
-7. L'admin peut régénérer avec un prompt modifié si nécessaire
-8. Enregistrer met à jour `override_image_url` avec l'URL du storage
+1. Ouvrir un événement du catalogue
+2. Modifier le titre ou la description
+3. Cliquer sur "Publier vers Événements"
+4. Vérifier qu'**un seul toast** de succès apparaît
+5. Vérifier que l'événement apparaît bien dans la page Événements avec le statut "draft"
