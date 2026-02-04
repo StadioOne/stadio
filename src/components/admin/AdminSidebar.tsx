@@ -21,6 +21,7 @@ import {
   Settings,
   Zap,
   Package,
+  Radio,
 } from "lucide-react";
 import {
   Sidebar,
@@ -49,6 +50,7 @@ const mainNavItems = [
   { key: "events", path: "/events", icon: Calendar },
   { key: "pricing", path: "/pricing", icon: DollarSign },
   { key: "categories", path: "/categories", icon: FolderOpen },
+  { key: "broadcasters", path: "/broadcasters", icon: Radio },
 ];
 
 const contentNavItems = [
