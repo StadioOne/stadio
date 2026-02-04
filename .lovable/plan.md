@@ -1,149 +1,160 @@
 
-# Plan : Attribution de diffuseur dans le Catalogue
+# Plan : Génération de description IA avec Mistral AI
 
-## Analyse de la demande
+## Objectif
 
-L'utilisateur souhaite améliorer la sélection du diffuseur dans la page Catalogue avec deux options :
-1. **Attribution automatique** basée sur les contrats (`rights_packages`) existants des diffuseurs
-2. **Recherche manuelle** dans la liste des diffuseurs enregistrés
+Ajouter un bouton "Générer avec IA" à côté du champ Description dans la page Catalogue. L'IA utilisera Mistral AI avec recherche web pour récupérer des informations contextuelles sur l'événement sportif et proposer une description engageante.
 
-## Situation actuelle
-
-Actuellement dans `CatalogPage.tsx` (lignes 546-566), le diffuseur est saisi manuellement via deux champs texte libres :
-- `broadcaster` : nom du diffuseur (texte libre)
-- `broadcaster_logo_url` : URL du logo (texte libre)
-
-## Solution proposée
-
-### 1. Nouveau composant `BroadcasterSelector`
-
-Un composant réutilisable avec deux modes :
-
-**Mode automatique :**
-- Analyse l'événement (sport, league, date) 
-- Recherche les `rights_packages` actifs correspondants
-- Affiche le(s) diffuseur(s) ayant des droits sur cette compétition/sport
-- Badge "Auto" pour indiquer une attribution automatique
-
-**Mode manuel :**
-- Combobox avec recherche dans la liste des `broadcasters`
-- Affiche le logo et le nom du diffuseur
-- Permet la sélection ou la suppression
-
-### 2. Hook `useBroadcasterSuggestions`
+## Architecture technique
 
 ```text
-┌─────────────────────────────────────────────────────────────┐
-│                  useBroadcasterSuggestions                  │
-├─────────────────────────────────────────────────────────────┤
-│ Input: sport_id, league_id, event_date                      │
-│                                                             │
-│ Logique:                                                    │
-│ 1. Requête rights_packages avec:                            │
-│    - status = 'active'                                      │
-│    - sport_id correspondant OU scope_type = 'sport'         │
-│    - league_id correspondant OU scope_type = 'competition'  │
-│    - start_at <= event_date <= end_at                       │
-│                                                             │
-│ 2. Join avec broadcasters pour récupérer:                   │
-│    - id, name, logo_url, status                             │
-│                                                             │
-│ 3. Retourne liste de suggestions avec confidence score      │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│                         Frontend (CatalogPage)                       │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  ┌─────────────────────────────────────────────────────────────┐    │
+│  │ Description                           [✨ Générer avec IA]  │    │
+│  │ ┌─────────────────────────────────────────────────────────┐ │    │
+│  │ │ Textarea avec description générée...                   │ │    │
+│  │ └─────────────────────────────────────────────────────────┘ │    │
+│  └─────────────────────────────────────────────────────────────┘    │
+│                               │                                     │
+│                               ▼                                     │
+│                    Appel Edge Function                              │
+└─────────────────────────────────────────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│              Edge Function: admin-ai-description                     │
+├─────────────────────────────────────────────────────────────────────┤
+│ 1. Reçoit les données de l'événement                                │
+│ 2. Construit un prompt contextuel                                   │
+│ 3. Appelle Mistral AI avec web_search tool activé                   │
+│ 4. Retourne la description générée                                  │
+└─────────────────────────────────────────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                         Mistral AI API                               │
+├─────────────────────────────────────────────────────────────────────┤
+│ Modèle: mistral-large-latest (avec web_search tool)                 │
+│ Recherche web automatique pour contexte live                        │
+└─────────────────────────────────────────────────────────────────────┘
 ```
-
-### 3. Modification de la structure de données
-
-L'événement stocke actuellement `broadcaster` (texte) et `broadcaster_logo_url`. 
-
-Pour une meilleure intégrité des données, on pourrait :
-- Option A : Garder les champs texte actuels (compatibilité) → sélection met à jour les deux champs
-- Option B : Ajouter un `broadcaster_id` (FK) → migration nécessaire
-
-**Recommandation** : Option A pour cette phase (pas de migration)
 
 ## Fichiers à créer/modifier
 
 | Fichier | Action | Description |
 |---------|--------|-------------|
-| `src/hooks/useBroadcasterSuggestions.ts` | Créer | Hook pour trouver les diffuseurs avec contrats valides |
-| `src/components/catalog/BroadcasterSelector.tsx` | Créer | Composant de sélection avec mode auto/manuel |
-| `src/pages/CatalogPage.tsx` | Modifier | Intégrer le nouveau composant |
+| `supabase/functions/admin-ai-description/index.ts` | Créer | Edge Function pour appeler Mistral AI |
+| `supabase/config.toml` | Modifier | Ajouter configuration de la fonction |
+| `src/pages/CatalogPage.tsx` | Modifier | Ajouter bouton et logique de génération |
+| Secret `MISTRAL_API_KEY` | Ajouter | Stocker la clé API fournie |
 
-## Détails techniques
+## Détails d'implémentation
 
-### Hook `useBroadcasterSuggestions`
+### 1. Edge Function `admin-ai-description`
 
-```text
-Paramètres:
-- sport_id: string | null
-- league_id: string | null  
-- event_date: string
+**Endpoint :** POST `/functions/v1/admin-ai-description`
 
-Retour:
-- suggestions: Array<{
-    broadcaster: Broadcaster,
-    matchType: 'sport' | 'competition' | 'season',
-    package: RightsPackage
-  }>
-- isLoading: boolean
+**Input :**
+```json
+{
+  "event": {
+    "sport": "Football",
+    "league": "Ligue 1",
+    "home_team": "PSG",
+    "away_team": "Olympique de Marseille",
+    "event_date": "2024-03-15T21:00:00Z",
+    "venue": "Parc des Princes",
+    "round": "Journée 28"
+  }
+}
 ```
 
-### Composant `BroadcasterSelector`
+**Logique :**
+1. Valider l'authentification admin
+2. Construire un prompt avec le contexte de l'événement
+3. Appeler Mistral AI avec le tool `web_search` pour obtenir des infos live
+4. Parser et retourner la description
 
-**Props:**
-- `value`: `{ name: string, logo_url: string | null }` ou `null`
-- `onChange`: callback avec broadcaster sélectionné
-- `sportId`, `leagueId`, `eventDate`: pour les suggestions automatiques
-
-**Interface:**
+**Prompt système :**
 ```text
-┌─────────────────────────────────────────────────────┐
-│ Diffuseur                                           │
-├─────────────────────────────────────────────────────┤
-│ ┌─────────────────────────────────────────────────┐ │
-│ │ 🔍 Rechercher un diffuseur...                   │ │
-│ └─────────────────────────────────────────────────┘ │
-│                                                     │
-│ Suggestions automatiques (basées sur les contrats) │
-│ ┌─────────────────────────────────────────────────┐ │
-│ │ [Logo] Canal+         [Badge: Ligue 1]  [Auto]  │ │
-│ │ [Logo] beIN Sports    [Badge: Sport]            │ │
-│ └─────────────────────────────────────────────────┘ │
-│                                                     │
-│ Tous les diffuseurs                                 │
-│ ┌─────────────────────────────────────────────────┐ │
-│ │ [Logo] DAZN                                     │ │
-│ │ [Logo] RMC Sport                                │ │
-│ │ ...                                             │ │
-│ └─────────────────────────────────────────────────┘ │
-└─────────────────────────────────────────────────────┘
+Tu es un rédacteur sportif expert. Génère une description engageante 
+pour un événement sportif destinée à une plateforme de streaming.
+
+La description doit :
+- Être en français
+- Contenir 2-3 phrases maximum (80-150 mots)
+- Mentionner les enjeux du match si pertinent
+- Être dynamique et attractive pour les spectateurs
+
+Utilise la recherche web pour trouver des informations actuelles 
+sur les équipes, leur forme récente, et les enjeux du match.
 ```
 
-### Modification de `CatalogPage.tsx`
+### 2. Modification de CatalogPage.tsx
 
-Remplacer les lignes 546-566 (champs texte broadcaster) par :
+**Ajout d'un bouton à côté du label Description :**
 
 ```text
-<BroadcasterSelector
-  value={editForm.broadcaster ? {
-    name: editForm.broadcaster,
-    logo_url: editForm.broadcaster_logo_url
-  } : null}
-  onChange={(b) => setEditForm(prev => ({
-    ...prev,
-    broadcaster: b?.name || '',
-    broadcaster_logo_url: b?.logo_url || ''
-  }))}
-  sportId={selectedEvent?.sport_id}
-  leagueId={selectedEvent?.league_id}
-  eventDate={selectedEvent?.event_date}
-/>
+┌────────────────────────────────────────────────────────────┐
+│ Description                                                │
+│ ┌──────────────────────────────────┐  ┌─────────────────┐  │
+│ │                                  │  │ ✨ Générer IA   │  │
+│ └──────────────────────────────────┘  └─────────────────┘  │
+│ ┌────────────────────────────────────────────────────────┐ │
+│ │ Textarea...                                            │ │
+│ │                                                        │ │
+│ └────────────────────────────────────────────────────────┘ │
+└────────────────────────────────────────────────────────────┘
 ```
 
-## Points d'attention
+**États UI :**
+- Idle : Bouton "Générer avec IA" avec icône sparkles
+- Loading : Bouton désactivé avec spinner + "Génération..."
+- Succès : Description insérée dans le textarea, toast de confirmation
+- Erreur : Toast d'erreur, textarea inchangé
 
-1. **Performance** : Le hook met en cache les suggestions pour éviter des requêtes multiples
-2. **UX** : Les suggestions automatiques apparaissent en premier avec un badge explicatif
-3. **Fallback** : Si aucun contrat ne correspond, afficher "Aucune suggestion" et permettre la sélection manuelle
-4. **Compatibilité** : Les événements existants avec texte libre restent fonctionnels
+### 3. Appel API Mistral
+
+```typescript
+// Structure de l'appel Mistral avec web search
+const response = await fetch('https://api.mistral.ai/v1/chat/completions', {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${MISTRAL_API_KEY}`,
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    model: 'mistral-large-latest',
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt }
+    ],
+    tools: [{
+      type: 'function',
+      function: {
+        name: 'web_search',
+        description: 'Search the web for current information'
+      }
+    }],
+    tool_choice: 'auto',
+    max_tokens: 500,
+  }),
+});
+```
+
+## Sécurité
+
+- Edge Function protégée par authentification admin
+- Clé API stockée en tant que secret Supabase (jamais exposée côté client)
+- Rate limiting implicite via l'appel authentifié
+
+## UX Flow
+
+1. L'admin ouvre le sheet de configuration d'un événement
+2. Il clique sur "Générer avec IA"
+3. Spinner pendant 3-5 secondes (recherche web + génération)
+4. La description apparaît dans le textarea
+5. L'admin peut modifier le texte avant d'enregistrer
