@@ -1,5 +1,4 @@
-import { X, Mail, Building2, FileText } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Mail, Building2 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
@@ -9,7 +8,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import { BroadcasterStatusBadge } from './BroadcasterStatusBadge';
-import { TerritoriesBadge } from './TerritoriesBadge';
+import { RightsTab } from './RightsTab';
 import type { BroadcasterWithStats } from '@/hooks/useBroadcasters';
 
 interface BroadcasterDetailPanelProps {
@@ -34,7 +33,7 @@ export function BroadcasterDetailPanel({
 
   return (
     <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
-      <SheetContent className="w-full sm:max-w-xl overflow-y-auto">
+      <SheetContent className="w-full sm:max-w-2xl overflow-y-auto">
         <SheetHeader className="space-y-4">
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-4">
@@ -73,27 +72,8 @@ export function BroadcasterDetailPanel({
             <TabsTrigger value="audit">Audit</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="rights" className="mt-4 space-y-4">
-            <div className="rounded-lg border p-4">
-              <div className="flex items-center gap-3 mb-4">
-                <FileText className="h-5 w-5 text-muted-foreground" />
-                <div>
-                  <p className="font-medium">Droits actifs</p>
-                  <p className="text-2xl font-bold">{broadcaster.activeRightsCount}</p>
-                </div>
-              </div>
-              
-              {broadcaster.territories.length > 0 && (
-                <div>
-                  <p className="text-sm text-muted-foreground mb-2">Territoires couverts</p>
-                  <TerritoriesBadge territories={broadcaster.territories} max={10} />
-                </div>
-              )}
-            </div>
-
-            <div className="text-center py-8 text-muted-foreground">
-              <p>La gestion détaillée des droits sera disponible prochainement.</p>
-            </div>
+          <TabsContent value="rights" className="mt-4">
+            <RightsTab broadcasterId={broadcaster.id} />
           </TabsContent>
 
           <TabsContent value="packages" className="mt-4">
