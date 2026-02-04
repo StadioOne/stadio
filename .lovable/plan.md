@@ -1,161 +1,221 @@
 
-# Plan : Ajouter la suppression d'événements dans le Catalogue
+# Plan : Synchronisation des ligues et système de favoris
 
 ## Objectif
-Permettre aux utilisateurs de supprimer un événement depuis la page Catalogue, avec une confirmation avant suppression pour éviter les erreurs.
+Améliorer la page "Import depuis API Sports" pour permettre :
+1. **Synchroniser les ligues** depuis l'API directement sur cette page
+2. **Marquer des ligues en favoris** pour les retrouver facilement
+3. **Retirer des ligues des favoris** quand elles ne sont plus nécessaires
 
-## Emplacement de la fonctionnalité
-La suppression sera accessible de deux façons :
-1. **Dans la liste des événements** : Un bouton icône "Corbeille" sur chaque carte d'événement
-2. **Dans le panneau de configuration (Sheet)** : Un bouton "Supprimer" en bas du formulaire
+---
+
+## Modifications de la base de données
+
+### Ajout d'une colonne `is_favorite` à la table `leagues`
+
+```sql
+ALTER TABLE public.leagues
+ADD COLUMN is_favorite boolean DEFAULT false;
+
+-- Ajouter un index pour optimiser les requêtes sur les favoris
+CREATE INDEX idx_leagues_favorite ON public.leagues(is_favorite) WHERE is_favorite = true;
+```
+
+---
 
 ## Interface utilisateur
 
-### 1. Bouton dans la liste
-- Ajout d'un bouton avec l'icône `Trash2` à côté du bouton "Configurer" sur chaque carte
-- Style `variant="ghost"` avec couleur destructive au survol
-- Ouverture d'une modale de confirmation au clic
+### 1. Bouton de synchronisation des ligues (Step 2)
 
-### 2. Bouton dans le Sheet de configuration  
-- Ajout d'un bouton "Supprimer" avec l'icône `Trash2` en dessous des boutons "Enregistrer" et "Publier"
-- Style `variant="destructive"` pour une visibilité claire
-- Même modale de confirmation
+Lorsqu'aucune ligue n'est disponible ou pour rafraîchir la liste, un bouton permettra de synchroniser les ligues depuis l'API :
 
-### 3. Modale de confirmation
-- Titre : "Supprimer l'événement"
-- Message : Affichage du nom de l'événement pour éviter les erreurs
-- Boutons : "Annuler" et "Supprimer" (rouge)
+```text
+┌─────────────────────────────────────────────────────────────┐
+│  Ligue et période                                           │
+│  Sélectionnez une ligue suivie et la période à explorer     │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  [Ligue] ▼  Sélectionnez une ligue                         │
+│                                                             │
+│  ★ Favoris (3)                                              │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │ ⚽ Premier League (Angleterre) • 2024    ★ [Retirer] │  │
+│  │ ⚽ Ligue 1 (France) • 2024               ★ [Retirer] │  │
+│  │ ⚽ La Liga (Espagne) • 2024              ★ [Retirer] │  │
+│  └──────────────────────────────────────────────────────┘  │
+│                                                             │
+│  [🔄 Synchroniser les ligues]                               │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 2. Sélecteur de ligue amélioré avec favoris
+
+Le sélecteur affichera :
+- **Section "Favoris"** en haut avec les ligues favorites
+- **Section "Toutes les ligues"** avec les autres ligues suivies
+- **Icône étoile** pour marquer/retirer des favoris
+
+### 3. Gestion des favoris dans le sélecteur
+
+Dans chaque ligne du sélecteur :
+- Clic sur l'étoile vide → ajoute aux favoris
+- Clic sur l'étoile pleine → retire des favoris
 
 ---
 
 ## Détails techniques
 
-### Modifications de `src/pages/CatalogPage.tsx`
+### Modifications de `src/pages/ApiSportsSettingsPage.tsx`
 
 **1. Nouveaux imports**
 ```typescript
-import { Trash2 } from "lucide-react";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
+import { Star, Download } from "lucide-react";
 ```
 
-**2. Nouvel état pour la suppression**
+**2. Modification de la requête des ligues**
+Charger toutes les ligues suivies avec le nouveau champ :
 ```typescript
-const [eventToDelete, setEventToDelete] = useState<CatalogEvent | null>(null);
-```
-
-**3. Nouvelle mutation de suppression**
-```typescript
-const deleteEventMutation = useMutation({
-  mutationFn: async (eventId: string) => {
-    // Supprimer d'abord le pricing associé
-    await supabase
-      .from('event_pricing')
-      .delete()
-      .eq('event_id', eventId);
-    
-    // Puis supprimer l'événement
-    const { error } = await supabase
-      .from('events')
-      .delete()
-      .eq('id', eventId);
-    
+const { data: leagues = [], isLoading: leaguesLoading } = useQuery({
+  queryKey: ['sport-leagues-synced', selectedSport?.id],
+  queryFn: async () => {
+    if (!selectedSport) return [];
+    const { data, error } = await supabase
+      .from('leagues')
+      .select('*')
+      .eq('sport_id', selectedSport.id)
+      .eq('is_synced', true)
+      .order('is_favorite', { ascending: false })
+      .order('name');
     if (error) throw error;
+    return data;
   },
-  onSuccess: () => {
-    queryClient.invalidateQueries({ queryKey: ['catalog-events'] });
-    setEventToDelete(null);
-    setSelectedEvent(null);
-    toast.success('Événement supprimé');
+  enabled: !!selectedSport,
+});
+```
+
+**3. Mutation pour synchroniser les ligues**
+```typescript
+const syncLeaguesMutation = useMutation({
+  mutationFn: async () => {
+    return callSportSyncEndpoint({
+      action: 'sync_leagues',
+      sport: selectedSport?.slug,
+    });
+  },
+  onSuccess: (result) => {
+    queryClient.invalidateQueries({ queryKey: ['sport-leagues-synced'] });
+    toast.success(`${result.data?.synced || 0} ligues synchronisées`);
   },
   onError: (error) => {
-    toast.error(error instanceof Error ? error.message : 'Erreur de suppression');
+    toast.error(error instanceof Error ? error.message : 'Erreur');
   },
 });
 ```
 
-**4. Fonction de confirmation**
+**4. Mutation pour toggle favoris**
 ```typescript
-const handleDeleteConfirm = () => {
-  if (eventToDelete) {
-    deleteEventMutation.mutate(eventToDelete.id);
-  }
-};
+const toggleFavoriteMutation = useMutation({
+  mutationFn: async ({ leagueId, isFavorite }: { leagueId: string; isFavorite: boolean }) => {
+    const { error } = await supabase
+      .from('leagues')
+      .update({ is_favorite: isFavorite })
+      .eq('id', leagueId);
+    if (error) throw error;
+  },
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ['sport-leagues-synced'] });
+    toast.success(isFavorite ? 'Ajouté aux favoris' : 'Retiré des favoris');
+  },
+});
 ```
 
-**5. Bouton dans chaque carte d'événement (ligne ~404)**
-Ajouter à côté du bouton "Configurer" :
+**5. Séparation des ligues favorites/non-favorites**
+```typescript
+const favoriteLeagues = leagues.filter(l => l.is_favorite);
+const otherLeagues = leagues.filter(l => !l.is_favorite);
+```
+
+**6. UI du sélecteur avec sections**
 ```tsx
-<Button 
-  variant="ghost" 
-  size="sm"
-  className="text-muted-foreground hover:text-destructive"
-  onClick={(e) => { 
-    e.stopPropagation(); 
-    setEventToDelete(event); 
-  }}
->
-  <Trash2 className="h-4 w-4" />
-</Button>
+<Select value={selectedLeagueId} onValueChange={setSelectedLeagueId}>
+  <SelectTrigger className="w-full max-w-md">
+    <SelectValue placeholder="Sélectionnez une ligue" />
+  </SelectTrigger>
+  <SelectContent>
+    {/* Section Favoris */}
+    {favoriteLeagues.length > 0 && (
+      <>
+        <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground flex items-center gap-1">
+          <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
+          Favoris
+        </div>
+        {favoriteLeagues.map((league) => (
+          <SelectItem key={league.id} value={league.id}>
+            <div className="flex items-center gap-2 w-full">
+              {league.logo_url && <img src={league.logo_url} className="h-4 w-4" />}
+              <span className="flex-1">{league.name}</span>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-5 w-5"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleFavoriteMutation.mutate({ leagueId: league.id, isFavorite: false });
+                }}
+              >
+                <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
+              </Button>
+            </div>
+          </SelectItem>
+        ))}
+        <Separator className="my-1" />
+      </>
+    )}
+    
+    {/* Section Autres ligues */}
+    <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
+      Toutes les ligues
+    </div>
+    {otherLeagues.map((league) => (
+      <SelectItem key={league.id} value={league.id}>
+        <div className="flex items-center gap-2 w-full">
+          {league.logo_url && <img src={league.logo_url} className="h-4 w-4" />}
+          <span className="flex-1">{league.name}</span>
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-5 w-5"
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleFavoriteMutation.mutate({ leagueId: league.id, isFavorite: true });
+            }}
+          >
+            <Star className="h-3 w-3 text-muted-foreground" />
+          </Button>
+        </div>
+      </SelectItem>
+    ))}
+  </SelectContent>
+</Select>
 ```
 
-**6. Bouton dans le Sheet (ligne ~559)**
-Ajouter avant les boutons d'action actuels :
+**7. Bouton de synchronisation**
+Ajouter sous le sélecteur de ligue :
 ```tsx
 <Button
-  variant="destructive"
+  variant="outline"
   size="sm"
-  onClick={() => setEventToDelete(selectedEvent)}
-  className="w-full"
+  onClick={() => syncLeaguesMutation.mutate()}
+  disabled={syncLeaguesMutation.isPending}
 >
-  <Trash2 className="h-4 w-4 mr-2" />
-  Supprimer l'événement
+  {syncLeaguesMutation.isPending ? (
+    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+  ) : (
+    <Download className="h-4 w-4 mr-2" />
+  )}
+  Synchroniser les ligues
 </Button>
-<Separator className="my-2" />
-```
-
-**7. Modale de confirmation (après le Sheet)**
-```tsx
-<AlertDialog 
-  open={!!eventToDelete} 
-  onOpenChange={(open) => !open && setEventToDelete(null)}
->
-  <AlertDialogContent>
-    <AlertDialogHeader>
-      <AlertDialogTitle>Supprimer l'événement</AlertDialogTitle>
-      <AlertDialogDescription>
-        Êtes-vous sûr de vouloir supprimer l'événement "
-        {eventToDelete?.override_title || eventToDelete?.api_title || 
-         `${eventToDelete?.home_team} vs ${eventToDelete?.away_team}`}" ?
-        Cette action est irréversible.
-      </AlertDialogDescription>
-    </AlertDialogHeader>
-    <AlertDialogFooter>
-      <AlertDialogCancel>Annuler</AlertDialogCancel>
-      <AlertDialogAction
-        onClick={handleDeleteConfirm}
-        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-        disabled={deleteEventMutation.isPending}
-      >
-        {deleteEventMutation.isPending ? (
-          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-        ) : (
-          <Trash2 className="h-4 w-4 mr-2" />
-        )}
-        Supprimer
-      </AlertDialogAction>
-    </AlertDialogFooter>
-  </AlertDialogContent>
-</AlertDialog>
 ```
 
 ---
@@ -164,13 +224,14 @@ Ajouter avant les boutons d'action actuels :
 
 | Fichier | Modifications |
 |---------|---------------|
-| `src/pages/CatalogPage.tsx` | Ajout de la fonctionnalité complète de suppression |
+| Migration SQL | Ajout colonne `is_favorite` + index |
+| `src/pages/ApiSportsSettingsPage.tsx` | Sélecteur amélioré, bouton sync, toggle favoris |
+
+---
 
 ## Comportement attendu
 
-1. L'utilisateur clique sur l'icône corbeille (liste) ou le bouton "Supprimer" (Sheet)
-2. Une modale de confirmation s'affiche avec le nom de l'événement
-3. Si confirmé, l'événement et son pricing associé sont supprimés
-4. Un toast de succès s'affiche et la liste se met à jour
-5. Si annulé, la modale se ferme sans action
-
+1. **Synchronisation** : L'utilisateur clique sur "Synchroniser les ligues" → appel API → ligues rafraîchies
+2. **Ajout favori** : L'utilisateur clique sur l'étoile vide d'une ligue → elle remonte en haut de la liste dans "Favoris"
+3. **Retrait favori** : L'utilisateur clique sur l'étoile pleine → la ligue redescend dans "Toutes les ligues"
+4. **Sélection** : Les favoris s'affichent toujours en premier pour un accès rapide
