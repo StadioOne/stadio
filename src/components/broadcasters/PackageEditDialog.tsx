@@ -305,9 +305,9 @@ export function PackageEditDialog({
                     <FormItem>
                       <FormLabel>Sport (filtre)</FormLabel>
                       <Select 
-                        value={field.value || ''} 
+                        value={field.value || '__all__'} 
                         onValueChange={(v) => {
-                          field.onChange(v || null);
+                          field.onChange(v === '__all__' ? null : v);
                           form.setValue('league_id', null);
                         }}
                       >
@@ -317,7 +317,7 @@ export function PackageEditDialog({
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="">Tous les sports</SelectItem>
+                          <SelectItem value="__all__">Tous les sports</SelectItem>
                           {sports?.map((s) => (
                             <SelectItem key={s.id} value={s.id}>
                               {s.name_fr || s.name}
