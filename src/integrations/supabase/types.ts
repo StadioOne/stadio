@@ -246,6 +246,81 @@ export type Database = {
         }
         Relationships: []
       }
+      broadcaster_users: {
+        Row: {
+          broadcaster_id: string
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["broadcaster_role"]
+          user_id: string
+        }
+        Insert: {
+          broadcaster_id: string
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["broadcaster_role"]
+          user_id: string
+        }
+        Update: {
+          broadcaster_id?: string
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["broadcaster_role"]
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "broadcaster_users_broadcaster_id_fkey"
+            columns: ["broadcaster_id"]
+            isOneToOne: false
+            referencedRelation: "broadcasters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "broadcaster_users_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
+      broadcasters: {
+        Row: {
+          contact_email: string | null
+          created_at: string
+          id: string
+          legal_name: string | null
+          logo_url: string | null
+          name: string
+          notes: string | null
+          status: Database["public"]["Enums"]["broadcaster_status"]
+          updated_at: string
+        }
+        Insert: {
+          contact_email?: string | null
+          created_at?: string
+          id?: string
+          legal_name?: string | null
+          logo_url?: string | null
+          name: string
+          notes?: string | null
+          status?: Database["public"]["Enums"]["broadcaster_status"]
+          updated_at?: string
+        }
+        Update: {
+          contact_email?: string | null
+          created_at?: string
+          id?: string
+          legal_name?: string | null
+          logo_url?: string | null
+          name?: string
+          notes?: string | null
+          status?: Database["public"]["Enums"]["broadcaster_status"]
+          updated_at?: string
+        }
+        Relationships: []
+      }
       categories: {
         Row: {
           auto_rules: Json | null
@@ -864,6 +939,174 @@ export type Database = {
         }
         Relationships: []
       }
+      rights_events: {
+        Row: {
+          broadcaster_id: string
+          created_at: string
+          created_by: string | null
+          event_id: string
+          exclusivity: Database["public"]["Enums"]["rights_exclusivity"]
+          expires_at: string | null
+          id: string
+          package_id: string | null
+          platform: Database["public"]["Enums"]["rights_platform"]
+          replay_window_hours: number | null
+          rights_highlights: boolean
+          rights_live: boolean
+          rights_replay: boolean
+          status: Database["public"]["Enums"]["rights_status"]
+          territories_allowed: string[]
+          territories_blocked: string[]
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          broadcaster_id: string
+          created_at?: string
+          created_by?: string | null
+          event_id: string
+          exclusivity?: Database["public"]["Enums"]["rights_exclusivity"]
+          expires_at?: string | null
+          id?: string
+          package_id?: string | null
+          platform?: Database["public"]["Enums"]["rights_platform"]
+          replay_window_hours?: number | null
+          rights_highlights?: boolean
+          rights_live?: boolean
+          rights_replay?: boolean
+          status?: Database["public"]["Enums"]["rights_status"]
+          territories_allowed?: string[]
+          territories_blocked?: string[]
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          broadcaster_id?: string
+          created_at?: string
+          created_by?: string | null
+          event_id?: string
+          exclusivity?: Database["public"]["Enums"]["rights_exclusivity"]
+          expires_at?: string | null
+          id?: string
+          package_id?: string | null
+          platform?: Database["public"]["Enums"]["rights_platform"]
+          replay_window_hours?: number | null
+          rights_highlights?: boolean
+          rights_live?: boolean
+          rights_replay?: boolean
+          status?: Database["public"]["Enums"]["rights_status"]
+          territories_allowed?: string[]
+          territories_blocked?: string[]
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rights_events_broadcaster_id_fkey"
+            columns: ["broadcaster_id"]
+            isOneToOne: false
+            referencedRelation: "broadcasters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rights_events_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rights_events_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events_published"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rights_events_package_id_fkey"
+            columns: ["package_id"]
+            isOneToOne: false
+            referencedRelation: "rights_packages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rights_packages: {
+        Row: {
+          broadcaster_id: string
+          created_at: string
+          end_at: string
+          id: string
+          is_exclusive_default: boolean
+          league_id: string | null
+          name: string
+          notes: string | null
+          scope_type: Database["public"]["Enums"]["package_scope"]
+          season: number | null
+          sport_id: string | null
+          start_at: string
+          status: Database["public"]["Enums"]["rights_status"]
+          territories_default: string[]
+          updated_at: string
+        }
+        Insert: {
+          broadcaster_id: string
+          created_at?: string
+          end_at: string
+          id?: string
+          is_exclusive_default?: boolean
+          league_id?: string | null
+          name: string
+          notes?: string | null
+          scope_type: Database["public"]["Enums"]["package_scope"]
+          season?: number | null
+          sport_id?: string | null
+          start_at: string
+          status?: Database["public"]["Enums"]["rights_status"]
+          territories_default?: string[]
+          updated_at?: string
+        }
+        Update: {
+          broadcaster_id?: string
+          created_at?: string
+          end_at?: string
+          id?: string
+          is_exclusive_default?: boolean
+          league_id?: string | null
+          name?: string
+          notes?: string | null
+          scope_type?: Database["public"]["Enums"]["package_scope"]
+          season?: number | null
+          sport_id?: string | null
+          start_at?: string
+          status?: Database["public"]["Enums"]["rights_status"]
+          territories_default?: string[]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rights_packages_broadcaster_id_fkey"
+            columns: ["broadcaster_id"]
+            isOneToOne: false
+            referencedRelation: "broadcasters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rights_packages_league_id_fkey"
+            columns: ["league_id"]
+            isOneToOne: false
+            referencedRelation: "leagues"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rights_packages_sport_id_fkey"
+            columns: ["sport_id"]
+            isOneToOne: false
+            referencedRelation: "sports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sports: {
         Row: {
           api_base_url: string | null
@@ -951,6 +1194,24 @@ export type Database = {
           updated_at?: string
           venue_city?: string | null
           venue_name?: string | null
+        }
+        Relationships: []
+      }
+      territories: {
+        Row: {
+          code: string
+          name: string
+          region: string | null
+        }
+        Insert: {
+          code: string
+          name: string
+          region?: string | null
+        }
+        Update: {
+          code?: string
+          name?: string
+          region?: string | null
         }
         Relationships: []
       }
@@ -1130,9 +1391,15 @@ export type Database = {
     }
     Enums: {
       admin_role: "owner" | "admin" | "editor" | "support"
+      broadcaster_role: "owner" | "admin" | "editor" | "viewer"
+      broadcaster_status: "active" | "suspended" | "pending"
       content_status: "catalog" | "draft" | "published" | "archived"
       original_type: "article" | "podcast" | "emission"
+      package_scope: "sport" | "competition" | "season"
       pricing_tier: "gold" | "silver" | "bronze"
+      rights_exclusivity: "exclusive" | "shared" | "non_exclusive"
+      rights_platform: "ott" | "linear" | "both"
+      rights_status: "draft" | "active" | "expired" | "revoked"
       workflow_status: "pending" | "running" | "success" | "failed"
     }
     CompositeTypes: {
@@ -1262,9 +1529,15 @@ export const Constants = {
   public: {
     Enums: {
       admin_role: ["owner", "admin", "editor", "support"],
+      broadcaster_role: ["owner", "admin", "editor", "viewer"],
+      broadcaster_status: ["active", "suspended", "pending"],
       content_status: ["catalog", "draft", "published", "archived"],
       original_type: ["article", "podcast", "emission"],
+      package_scope: ["sport", "competition", "season"],
       pricing_tier: ["gold", "silver", "bronze"],
+      rights_exclusivity: ["exclusive", "shared", "non_exclusive"],
+      rights_platform: ["ott", "linear", "both"],
+      rights_status: ["draft", "active", "expired", "revoked"],
       workflow_status: ["pending", "running", "success", "failed"],
     },
   },

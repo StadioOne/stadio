@@ -91,6 +91,7 @@ const fr = {
     analytics: "Analytics",
     settings: "Paramètres",
     apiSports: "API Sports",
+    broadcasters: "Diffuseurs",
   },
   dashboard: {
     title: "Tableau de bord",
@@ -668,6 +669,7 @@ const en = {
   },
   nav: {
     dashboard: "Dashboard",
+    catalog: "Catalog",
     events: "Events",
     pricing: "Pricing",
     categories: "Catalogs",
@@ -679,6 +681,7 @@ const en = {
     analytics: "Analytics",
     settings: "Settings",
     apiSports: "API Sports",
+    broadcasters: "Broadcasters",
   },
   dashboard: {
     title: "Dashboard",

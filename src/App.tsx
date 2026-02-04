@@ -21,6 +21,7 @@ import AnalyticsFixturesPage from "@/pages/AnalyticsFixturesPage";
 import AnalyticsOriginalsPage from "@/pages/AnalyticsOriginalsPage";
 import ApiSportsSettingsPage from "@/pages/ApiSportsSettingsPage";
 import CatalogPage from "@/pages/CatalogPage";
+import BroadcastersPage from "@/pages/BroadcastersPage";
 import NotFound from "@/pages/NotFound";
 import "@/lib/i18n";
 
@@ -81,6 +82,7 @@ function AppRoutes() {
         <Route path="/analytics/fixtures" element={<AnalyticsFixturesPage />} />
         <Route path="/analytics/originals" element={<AnalyticsOriginalsPage />} />
         <Route path="/settings/api-sports" element={<ApiSportsSettingsPage />} />
+        <Route path="/broadcasters" element={<BroadcastersPage />} />
       </Route>
 
       <Route path="*" element={<NotFound />} />
