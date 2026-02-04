@@ -27,6 +27,16 @@ import {
   SheetDescription,
 } from "@/components/ui/sheet";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Calendar,
   DollarSign,
   Edit,
@@ -35,6 +45,7 @@ import {
   Package,
   Radio,
   Send,
+  Trash2,
   Trophy,
   Search,
   Filter,
@@ -76,6 +87,7 @@ export default function CatalogPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [sportFilter, setSportFilter] = useState<string>("all");
   const [selectedEvent, setSelectedEvent] = useState<CatalogEvent | null>(null);
+  const [eventToDelete, setEventToDelete] = useState<CatalogEvent | null>(null);
   const [editForm, setEditForm] = useState({
     override_title: "",
     override_description: "",
@@ -142,6 +154,34 @@ export default function CatalogPage() {
     },
     onError: (error) => {
       toast.error(error instanceof Error ? error.message : 'Erreur de mise à jour');
+    },
+  });
+
+  // Delete event mutation
+  const deleteEventMutation = useMutation({
+    mutationFn: async (eventId: string) => {
+      // Supprimer d'abord le pricing associé
+      await supabase
+        .from('event_pricing')
+        .delete()
+        .eq('event_id', eventId);
+      
+      // Puis supprimer l'événement
+      const { error } = await supabase
+        .from('events')
+        .delete()
+        .eq('id', eventId);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['catalog-events'] });
+      setEventToDelete(null);
+      setSelectedEvent(null);
+      toast.success('Événement supprimé');
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : 'Erreur de suppression');
     },
   });
 
@@ -401,10 +441,23 @@ export default function CatalogPage() {
                             </div>
                           </div>
 
-                          <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); openEditSheet(event); }}>
-                            <Edit className="h-4 w-4 mr-2" />
-                            Configurer
-                          </Button>
+                          <div className="flex items-center gap-2">
+                            <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); openEditSheet(event); }}>
+                              <Edit className="h-4 w-4 mr-2" />
+                              Configurer
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              className="text-muted-foreground hover:text-destructive"
+                              onClick={(e) => { 
+                                e.stopPropagation(); 
+                                setEventToDelete(event); 
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </div>
                       </CardContent>
                     </Card>
@@ -556,6 +609,19 @@ export default function CatalogPage() {
               </CardContent>
             </Card>
 
+            {/* Delete button */}
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => setEventToDelete(selectedEvent)}
+              className="w-full"
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Supprimer l'événement
+            </Button>
+
+            <Separator className="my-2" />
+
             {/* Actions */}
             <div className="flex gap-3 pt-4">
               <Button
@@ -583,6 +649,39 @@ export default function CatalogPage() {
           </div>
         </SheetContent>
       </Sheet>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog 
+        open={!!eventToDelete} 
+        onOpenChange={(open) => !open && setEventToDelete(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Supprimer l'événement</AlertDialogTitle>
+            <AlertDialogDescription>
+              Êtes-vous sûr de vouloir supprimer l'événement "
+              {eventToDelete?.override_title || eventToDelete?.api_title || 
+               `${eventToDelete?.home_team} vs ${eventToDelete?.away_team}`}" ?
+              Cette action est irréversible.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => eventToDelete && deleteEventMutation.mutate(eventToDelete.id)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleteEventMutation.isPending}
+            >
+              {deleteEventMutation.isPending ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4 mr-2" />
+              )}
+              Supprimer
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
