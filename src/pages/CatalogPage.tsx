@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { BroadcasterSelector } from "@/components/catalog/BroadcasterSelector";
 import {
   Select,
   SelectContent,
@@ -60,6 +61,7 @@ interface CatalogEvent {
   sport: string;
   sport_id: string | null;
   league: string | null;
+  league_id: string | null;
   home_team: string | null;
   away_team: string | null;
   api_title: string | null;
@@ -545,23 +547,20 @@ export default function CatalogPage() {
 
             {/* Broadcaster */}
             <div className="space-y-2">
-              <Label htmlFor="broadcaster">Diffuseur (Broadcaster)</Label>
-              <Input
-                id="broadcaster"
-                placeholder="Canal+, beIN Sports, DAZN..."
-                value={editForm.broadcaster}
-                onChange={(e) => setEditForm(prev => ({ ...prev, broadcaster: e.target.value }))}
-              />
-            </div>
-
-            {/* Broadcaster logo */}
-            <div className="space-y-2">
-              <Label htmlFor="broadcaster_logo_url">Logo du diffuseur (URL)</Label>
-              <Input
-                id="broadcaster_logo_url"
-                placeholder="https://..."
-                value={editForm.broadcaster_logo_url}
-                onChange={(e) => setEditForm(prev => ({ ...prev, broadcaster_logo_url: e.target.value }))}
+              <Label>Diffuseur</Label>
+              <BroadcasterSelector
+                value={editForm.broadcaster ? {
+                  name: editForm.broadcaster,
+                  logo_url: editForm.broadcaster_logo_url || null,
+                } : null}
+                onChange={(b) => setEditForm(prev => ({
+                  ...prev,
+                  broadcaster: b?.name || '',
+                  broadcaster_logo_url: b?.logo_url || '',
+                }))}
+                sportId={selectedEvent?.sport_id}
+                leagueId={selectedEvent?.league_id}
+                eventDate={selectedEvent?.event_date}
               />
             </div>
 
