@@ -1,66 +1,45 @@
 
-# Plan : Synchronisation des ligues et système de favoris
+# Plan : Détection des doublons lors de l'import des matchs
 
 ## Objectif
-Améliorer la page "Import depuis API Sports" pour permettre :
-1. **Synchroniser les ligues** depuis l'API directement sur cette page
-2. **Marquer des ligues en favoris** pour les retrouver facilement
-3. **Retirer des ligues des favoris** quand elles ne sont plus nécessaires
+Comparer les matchs proposés par l'API avec les événements déjà présents en base (statut `catalog`, `draft`, `published`) afin d'indiquer visuellement les doublons et éviter les imports inutiles.
 
 ---
 
-## Modifications de la base de données
+## Stratégie de détection
 
-### Ajout d'une colonne `is_favorite` à la table `leagues`
+### Identification des doublons
+- Chaque match de l'API possède un `id` numérique unique (ex: `1035478`)
+- La table `events` stocke cet identifiant dans la colonne `external_id` (format texte)
+- La comparaison se fait via : `external_id = game.id.toString()`
 
-```sql
-ALTER TABLE public.leagues
-ADD COLUMN is_favorite boolean DEFAULT false;
-
--- Ajouter un index pour optimiser les requêtes sur les favoris
-CREATE INDEX idx_leagues_favorite ON public.leagues(is_favorite) WHERE is_favorite = true;
-```
+### Affichage visuel
+- Les matchs **déjà importés** seront marqués avec un badge indiquant leur statut actuel
+- Ces matchs seront **désélectionnés par défaut** et auront un style visuel distinct
+- Possibilité de les sélectionner quand même (pour mettre à jour les données)
 
 ---
 
 ## Interface utilisateur
 
-### 1. Bouton de synchronisation des ligues (Step 2)
-
-Lorsqu'aucune ligue n'est disponible ou pour rafraîchir la liste, un bouton permettra de synchroniser les ligues depuis l'API :
-
 ```text
-┌─────────────────────────────────────────────────────────────┐
-│  Ligue et période                                           │
-│  Sélectionnez une ligue suivie et la période à explorer     │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  [Ligue] ▼  Sélectionnez une ligue                         │
-│                                                             │
-│  ★ Favoris (3)                                              │
-│  ┌──────────────────────────────────────────────────────┐  │
-│  │ ⚽ Premier League (Angleterre) • 2024    ★ [Retirer] │  │
-│  │ ⚽ Ligue 1 (France) • 2024               ★ [Retirer] │  │
-│  │ ⚽ La Liga (Espagne) • 2024              ★ [Retirer] │  │
-│  └──────────────────────────────────────────────────────┘  │
-│                                                             │
-│  [🔄 Synchroniser les ligues]                               │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────┐
+│ ☐ PSG vs Marseille                   15 Mar    [NS]  ← Normal     │
+│ ☐ Lyon vs Nice                       16 Mar    [NS]               │
+│ ☐ Monaco vs Lens      [Déjà importé] 17 Mar    [NS]  ← Badge vert │
+│ ☐ Lille vs Rennes     [Publié]       18 Mar    [NS]  ← Badge bleu │
+└────────────────────────────────────────────────────────────────────┘
 ```
 
-### 2. Sélecteur de ligue amélioré avec favoris
+### Badges de statut
+- **`Catalogue`** : badge vert pour les événements au statut `catalog`
+- **`Brouillon`** : badge jaune pour le statut `draft`  
+- **`Publié`** : badge bleu pour le statut `published`
 
-Le sélecteur affichera :
-- **Section "Favoris"** en haut avec les ligues favorites
-- **Section "Toutes les ligues"** avec les autres ligues suivies
-- **Icône étoile** pour marquer/retirer des favoris
-
-### 3. Gestion des favoris dans le sélecteur
-
-Dans chaque ligne du sélecteur :
-- Clic sur l'étoile vide → ajoute aux favoris
-- Clic sur l'étoile pleine → retire des favoris
+### Comportement de sélection
+- Les matchs déjà importés ne sont pas inclus dans "Tout sélectionner"
+- Ils peuvent être sélectionnés manuellement si l'utilisateur souhaite mettre à jour les données
+- Le compteur affiche le nombre de nouveaux matchs vs doublons
 
 ---
 
@@ -68,170 +47,152 @@ Dans chaque ligne du sélecteur :
 
 ### Modifications de `src/pages/ApiSportsSettingsPage.tsx`
 
-**1. Nouveaux imports**
-```typescript
-import { Star, Download } from "lucide-react";
-```
+**1. Nouvelle requête pour charger les événements existants**
 
-**2. Modification de la requête des ligues**
-Charger toutes les ligues suivies avec le nouveau champ :
+Après avoir récupéré les matchs de l'API, on charge les `external_id` déjà présents en base :
+
 ```typescript
-const { data: leagues = [], isLoading: leaguesLoading } = useQuery({
-  queryKey: ['sport-leagues-synced', selectedSport?.id],
+// Fetch existing events to detect duplicates
+const { data: existingEvents = [] } = useQuery({
+  queryKey: ['existing-events-external-ids'],
   queryFn: async () => {
-    if (!selectedSport) return [];
     const { data, error } = await supabase
-      .from('leagues')
-      .select('*')
-      .eq('sport_id', selectedSport.id)
-      .eq('is_synced', true)
-      .order('is_favorite', { ascending: false })
-      .order('name');
+      .from('events')
+      .select('external_id, status')
+      .not('external_id', 'is', null);
     if (error) throw error;
-    return data;
-  },
-  enabled: !!selectedSport,
-});
-```
-
-**3. Mutation pour synchroniser les ligues**
-```typescript
-const syncLeaguesMutation = useMutation({
-  mutationFn: async () => {
-    return callSportSyncEndpoint({
-      action: 'sync_leagues',
-      sport: selectedSport?.slug,
-    });
-  },
-  onSuccess: (result) => {
-    queryClient.invalidateQueries({ queryKey: ['sport-leagues-synced'] });
-    toast.success(`${result.data?.synced || 0} ligues synchronisées`);
-  },
-  onError: (error) => {
-    toast.error(error instanceof Error ? error.message : 'Erreur');
+    return data as { external_id: string; status: string }[];
   },
 });
 ```
 
-**4. Mutation pour toggle favoris**
+**2. Map pour vérification rapide des doublons**
+
 ```typescript
-const toggleFavoriteMutation = useMutation({
-  mutationFn: async ({ leagueId, isFavorite }: { leagueId: string; isFavorite: boolean }) => {
-    const { error } = await supabase
-      .from('leagues')
-      .update({ is_favorite: isFavorite })
-      .eq('id', leagueId);
-    if (error) throw error;
-  },
-  onSuccess: () => {
-    queryClient.invalidateQueries({ queryKey: ['sport-leagues-synced'] });
-    toast.success(isFavorite ? 'Ajouté aux favoris' : 'Retiré des favoris');
-  },
-});
+// Create a map of external_id -> status for quick lookup
+const existingEventsMap = useMemo(() => {
+  const map = new Map<string, string>();
+  existingEvents.forEach(e => {
+    if (e.external_id) {
+      map.set(e.external_id, e.status);
+    }
+  });
+  return map;
+}, [existingEvents]);
+
+// Check if a game already exists
+const getGameStatus = (gameId: number): string | null => {
+  return existingEventsMap.get(gameId.toString()) || null;
+};
 ```
 
-**5. Séparation des ligues favorites/non-favorites**
+**3. Filtrage des matchs pour "Tout sélectionner"**
+
+Modifier `toggleAllGames` pour exclure les doublons :
+
 ```typescript
-const favoriteLeagues = leagues.filter(l => l.is_favorite);
-const otherLeagues = leagues.filter(l => !l.is_favorite);
+const toggleAllGames = () => {
+  const newGames = games.filter(g => !getGameStatus(g.id));
+  if (selectedGames.size === newGames.length && newGames.length > 0) {
+    setSelectedGames(new Set());
+  } else {
+    setSelectedGames(new Set(newGames.map(g => g.id)));
+  }
+};
 ```
 
-**6. UI du sélecteur avec sections**
-```tsx
-<Select value={selectedLeagueId} onValueChange={setSelectedLeagueId}>
-  <SelectTrigger className="w-full max-w-md">
-    <SelectValue placeholder="Sélectionnez une ligue" />
-  </SelectTrigger>
-  <SelectContent>
-    {/* Section Favoris */}
-    {favoriteLeagues.length > 0 && (
-      <>
-        <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground flex items-center gap-1">
-          <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
-          Favoris
-        </div>
-        {favoriteLeagues.map((league) => (
-          <SelectItem key={league.id} value={league.id}>
-            <div className="flex items-center gap-2 w-full">
-              {league.logo_url && <img src={league.logo_url} className="h-4 w-4" />}
-              <span className="flex-1">{league.name}</span>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-5 w-5"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  toggleFavoriteMutation.mutate({ leagueId: league.id, isFavorite: false });
-                }}
-              >
-                <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
-              </Button>
-            </div>
-          </SelectItem>
-        ))}
-        <Separator className="my-1" />
-      </>
-    )}
-    
-    {/* Section Autres ligues */}
-    <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
-      Toutes les ligues
-    </div>
-    {otherLeagues.map((league) => (
-      <SelectItem key={league.id} value={league.id}>
-        <div className="flex items-center gap-2 w-full">
-          {league.logo_url && <img src={league.logo_url} className="h-4 w-4" />}
-          <span className="flex-1">{league.name}</span>
-          <Button
-            size="icon"
-            variant="ghost"
-            className="h-5 w-5"
-            onClick={(e) => {
-              e.stopPropagation();
-              toggleFavoriteMutation.mutate({ leagueId: league.id, isFavorite: true });
-            }}
-          >
-            <Star className="h-3 w-3 text-muted-foreground" />
-          </Button>
-        </div>
-      </SelectItem>
-    ))}
-  </SelectContent>
-</Select>
-```
+**4. Compteur amélioré**
 
-**7. Bouton de synchronisation**
-Ajouter sous le sélecteur de ligue :
-```tsx
-<Button
-  variant="outline"
-  size="sm"
-  onClick={() => syncLeaguesMutation.mutate()}
-  disabled={syncLeaguesMutation.isPending}
->
-  {syncLeaguesMutation.isPending ? (
-    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-  ) : (
-    <Download className="h-4 w-4 mr-2" />
+```typescript
+const newGamesCount = games.filter(g => !getGameStatus(g.id)).length;
+const duplicatesCount = games.length - newGamesCount;
+
+// Affichage
+<span className="text-sm text-muted-foreground">
+  {selectedGames.size} sélectionné(s) • {newGamesCount} nouveaux
+  {duplicatesCount > 0 && (
+    <span className="text-amber-600 ml-2">
+      ({duplicatesCount} déjà importé{duplicatesCount > 1 ? 's' : ''})
+    </span>
   )}
-  Synchroniser les ligues
-</Button>
+</span>
+```
+
+**5. Rendu des matchs avec indication de doublon**
+
+```tsx
+{games.map((game) => {
+  const existingStatus = getGameStatus(game.id);
+  const isDuplicate = !!existingStatus;
+  
+  return (
+    <div
+      key={game.id}
+      className={cn(
+        "flex items-center gap-4 p-3 rounded-lg border cursor-pointer transition-colors",
+        selectedGames.has(game.id) && "border-primary bg-primary/5",
+        isDuplicate && !selectedGames.has(game.id) && "opacity-60 bg-muted/30"
+      )}
+      onClick={() => toggleGame(game.id)}
+    >
+      <Checkbox ... />
+      
+      {/* Teams */}
+      <div className="flex-1 min-w-0">
+        ...
+      </div>
+
+      {/* Date */}
+      <div className="text-right flex-shrink-0">
+        ...
+      </div>
+
+      {/* Status badges */}
+      {isDuplicate && (
+        <Badge 
+          variant={
+            existingStatus === 'published' ? 'default' : 
+            existingStatus === 'draft' ? 'secondary' : 'outline'
+          }
+          className={cn(
+            existingStatus === 'catalog' && "bg-green-100 text-green-700 border-green-300",
+            existingStatus === 'published' && "bg-blue-100 text-blue-700 border-blue-300"
+          )}
+        >
+          {existingStatus === 'catalog' && 'Catalogue'}
+          {existingStatus === 'draft' && 'Brouillon'}
+          {existingStatus === 'published' && 'Publié'}
+        </Badge>
+      )}
+      
+      <Badge variant="outline">{game.status}</Badge>
+    </div>
+  );
+})}
+```
+
+**6. Import avec icône CheckCircle2**
+
+Nouvel import requis :
+```typescript
+import { CheckCircle2 } from "lucide-react";
 ```
 
 ---
 
-## Résumé des fichiers modifiés
+## Résumé des modifications
 
 | Fichier | Modifications |
 |---------|---------------|
-| Migration SQL | Ajout colonne `is_favorite` + index |
-| `src/pages/ApiSportsSettingsPage.tsx` | Sélecteur amélioré, bouton sync, toggle favoris |
+| `src/pages/ApiSportsSettingsPage.tsx` | Détection et affichage des doublons |
 
 ---
 
 ## Comportement attendu
 
-1. **Synchronisation** : L'utilisateur clique sur "Synchroniser les ligues" → appel API → ligues rafraîchies
-2. **Ajout favori** : L'utilisateur clique sur l'étoile vide d'une ligue → elle remonte en haut de la liste dans "Favoris"
-3. **Retrait favori** : L'utilisateur clique sur l'étoile pleine → la ligue redescend dans "Toutes les ligues"
-4. **Sélection** : Les favoris s'affichent toujours en premier pour un accès rapide
+1. L'utilisateur sélectionne une ligue et recherche les matchs
+2. Les matchs déjà importés apparaissent avec un badge coloré indiquant leur statut
+3. Ces matchs sont visuellement atténués (opacity réduite)
+4. "Tout sélectionner" n'inclut que les nouveaux matchs
+5. L'utilisateur peut quand même sélectionner manuellement un doublon pour mettre à jour ses données
+6. Le compteur affiche clairement le nombre de nouveaux vs existants
