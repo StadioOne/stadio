@@ -17,12 +17,21 @@ interface MistralMessage {
   content: string;
 }
 
+interface MistralChoice {
+  message: {
+    content: string | null;
+    tool_calls?: Array<{
+      function: {
+        name: string;
+        arguments: string;
+      };
+    }>;
+  };
+  finish_reason: string;
+}
+
 interface MistralResponse {
-  choices: Array<{
-    message: {
-      content: string;
-    };
-  }>;
+  choices: MistralChoice[];
 }
 
 serve(async (req: Request) => {
@@ -64,18 +73,6 @@ serve(async (req: Request) => {
       );
     }
 
-    // Build the prompt
-    const systemPrompt = `Tu es un rédacteur sportif expert. Génère une description engageante pour un événement sportif destinée à une plateforme de streaming.
-
-La description doit :
-- Être en français
-- Contenir 2-3 phrases maximum (80-150 mots)
-- Mentionner les enjeux du match si pertinent (classement, rivalité, etc.)
-- Être dynamique et attractive pour les spectateurs
-- Utiliser un ton professionnel mais accessible
-
-Utilise la recherche web pour trouver des informations actuelles sur les équipes, leur forme récente, et les enjeux du match.`;
-
     // Build context from event data
     const eventContext: string[] = [];
     eventContext.push(`Sport: ${event.sport}`);
@@ -97,18 +94,32 @@ Utilise la recherche web pour trouver des informations actuelles sur les équipe
       })}`);
     }
 
-    const userPrompt = `Génère une description pour cet événement sportif :
+    // Build the prompt - comprehensive prompt that doesn't require web search
+    const systemPrompt = `Tu es un rédacteur sportif expert travaillant pour une plateforme de streaming sportif. Tu génères des descriptions engageantes pour les événements.
+
+RÈGLES STRICTES :
+- Écris en français
+- 2-3 phrases maximum (80-150 mots)
+- Ton dynamique et professionnel
+- Mentionne les enjeux possibles si c'est un match important (derby, classique, finale, etc.)
+- Sois factuel mais enthousiaste
+- Ne fais PAS de suppositions sur les classements actuels si tu n'es pas sûr
+- Réponds UNIQUEMENT avec la description, sans commentaires additionnels`;
+
+    const userPrompt = `Génère une description attractive pour cet événement sportif :
 
 ${eventContext.join('\n')}
 
-Recherche sur le web les dernières informations sur ces équipes/joueurs pour enrichir ta description avec des données actuelles (forme récente, classement, enjeux).`;
+Écris une description courte et percutante qui donne envie aux spectateurs de regarder ce match.`;
 
     const messages: MistralMessage[] = [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt }
     ];
 
-    // Call Mistral AI with web search tool
+    console.log('Calling Mistral API for event:', event.home_team, 'vs', event.away_team);
+
+    // Call Mistral AI - simple completion without tools
     const mistralResponse = await fetch('https://api.mistral.ai/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -118,25 +129,7 @@ Recherche sur le web les dernières informations sur ces équipes/joueurs pour e
       body: JSON.stringify({
         model: 'mistral-large-latest',
         messages,
-        tools: [{
-          type: 'function',
-          function: {
-            name: 'web_search',
-            description: 'Search the web for current information about teams, players, and match context',
-            parameters: {
-              type: 'object',
-              properties: {
-                query: {
-                  type: 'string',
-                  description: 'The search query'
-                }
-              },
-              required: ['query']
-            }
-          }
-        }],
-        tool_choice: 'auto',
-        max_tokens: 500,
+        max_tokens: 300,
         temperature: 0.7,
       }),
     });
@@ -151,9 +144,13 @@ Recherche sur le web les dernières informations sur ces équipes/joueurs pour e
     }
 
     const result: MistralResponse = await mistralResponse.json();
-    const description = result.choices?.[0]?.message?.content;
+    console.log('Mistral response:', JSON.stringify(result, null, 2));
+
+    const choice = result.choices?.[0];
+    const description = choice?.message?.content;
 
     if (!description) {
+      console.error('No content in response:', JSON.stringify(result));
       return new Response(
         JSON.stringify({ success: false, error: 'No description generated' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -162,6 +159,8 @@ Recherche sur le web les dernières informations sur ces équipes/joueurs pour e
 
     // Clean up the description (remove quotes if present)
     const cleanDescription = description.replace(/^["']|["']$/g, '').trim();
+
+    console.log('Generated description:', cleanDescription);
 
     return new Response(
       JSON.stringify({ success: true, data: { description: cleanDescription } }),
