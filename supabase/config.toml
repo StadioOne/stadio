@@ -56,3 +56,6 @@ verify_jwt = false
 
 [functions.public-events-api]
 verify_jwt = false
+
+[functions.admin-rights-resolve]
+verify_jwt = false
