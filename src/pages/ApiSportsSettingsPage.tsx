@@ -17,12 +17,13 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import { cn } from "@/lib/utils";
 import { 
   RefreshCw, 
@@ -37,6 +38,9 @@ import {
   Package,
   ArrowRight,
   Star,
+  ChevronsUpDown,
+  Check,
+  Search,
 } from "lucide-react";
 
 interface Sport {
@@ -106,6 +110,7 @@ export default function ApiSportsSettingsPage() {
   const [selectedLeagueId, setSelectedLeagueId] = useState<string>("");
   const [dateFrom, setDateFrom] = useState<Date>(new Date());
   const [dateTo, setDateTo] = useState<Date>(addDays(new Date(), 7));
+  const [leagueSearchOpen, setLeagueSearchOpen] = useState(false);
   
   // Step 3: Games selection
   const [selectedGames, setSelectedGames] = useState<Set<number>>(new Set());
@@ -382,82 +387,124 @@ export default function ApiSportsSettingsPage() {
                     </Button>
                   </div>
                   
-                  <Select value={selectedLeagueId} onValueChange={setSelectedLeagueId}>
-                    <SelectTrigger className="w-full max-w-md">
-                      <SelectValue placeholder="Sélectionnez une ligue" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {/* Favorites section */}
-                      {favoriteLeagues.length > 0 && (
-                        <>
-                          <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground flex items-center gap-1">
-                            <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
-                            Favoris ({favoriteLeagues.length})
+                  <Popover open={leagueSearchOpen} onOpenChange={setLeagueSearchOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={leagueSearchOpen}
+                        className="w-full max-w-md justify-between"
+                      >
+                        {selectedLeagueId ? (
+                          <div className="flex items-center gap-2">
+                            {selectedLeague?.logo_url && (
+                              <img src={selectedLeague.logo_url} alt="" className="h-4 w-4 object-contain" />
+                            )}
+                            <span>{selectedLeague?.name}</span>
+                            {selectedLeague?.country && (
+                              <span className="text-muted-foreground text-xs">({selectedLeague.country})</span>
+                            )}
                           </div>
-                          {favoriteLeagues.map((league) => (
-                            <SelectItem key={league.id} value={league.id}>
-                              <div className="flex items-center gap-2 w-full">
-                                {league.logo_url && (
-                                  <img src={league.logo_url} alt="" className="h-4 w-4 object-contain" />
-                                )}
-                                <span className="flex-1">{league.name}</span>
-                                {league.country && <span className="text-muted-foreground text-xs">({league.country})</span>}
-                                <button
-                                  type="button"
-                                  className="ml-2 p-0.5 hover:bg-accent rounded"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    e.preventDefault();
-                                    toggleFavoriteMutation.mutate({ leagueId: league.id, isFavorite: false });
-                                  }}
-                                >
-                                  <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
-                                </button>
+                        ) : (
+                          <span className="text-muted-foreground">Rechercher une ligue...</span>
+                        )}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-full max-w-md p-0" align="start">
+                      <Command>
+                        <CommandInput placeholder="Rechercher une ligue..." />
+                        <CommandList>
+                          <CommandEmpty>Aucune ligue trouvée.</CommandEmpty>
+                          
+                          {/* Favorites section */}
+                          {favoriteLeagues.length > 0 && (
+                            <CommandGroup heading={
+                              <div className="flex items-center gap-1">
+                                <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
+                                Favoris ({favoriteLeagues.length})
                               </div>
-                            </SelectItem>
-                          ))}
-                          <Separator className="my-1" />
-                        </>
-                      )}
-                      
-                      {/* Other leagues section */}
-                      {otherLeagues.length > 0 && (
-                        <>
-                          <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
-                            Toutes les ligues ({otherLeagues.length})
-                          </div>
-                          {otherLeagues.map((league) => (
-                            <SelectItem key={league.id} value={league.id}>
-                              <div className="flex items-center gap-2 w-full">
-                                {league.logo_url && (
-                                  <img src={league.logo_url} alt="" className="h-4 w-4 object-contain" />
-                                )}
-                                <span className="flex-1">{league.name}</span>
-                                {league.country && <span className="text-muted-foreground text-xs">({league.country})</span>}
-                                <button
-                                  type="button"
-                                  className="ml-2 p-0.5 hover:bg-accent rounded"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    e.preventDefault();
-                                    toggleFavoriteMutation.mutate({ leagueId: league.id, isFavorite: true });
+                            }>
+                              {favoriteLeagues.map((league) => (
+                                <CommandItem
+                                  key={league.id}
+                                  value={`${league.name} ${league.country || ''}`}
+                                  onSelect={() => {
+                                    setSelectedLeagueId(league.id);
+                                    setLeagueSearchOpen(false);
                                   }}
+                                  className="flex items-center gap-2"
                                 >
-                                  <Star className="h-3.5 w-3.5 text-muted-foreground hover:text-yellow-400" />
-                                </button>
-                              </div>
-                            </SelectItem>
-                          ))}
-                        </>
-                      )}
-                      
-                      {leagues.length === 0 && (
-                        <div className="px-2 py-4 text-center text-sm text-muted-foreground">
-                          Aucune ligue disponible. Cliquez sur "Synchroniser les ligues".
-                        </div>
-                      )}
-                    </SelectContent>
-                  </Select>
+                                  <Check
+                                    className={cn(
+                                      "h-4 w-4",
+                                      selectedLeagueId === league.id ? "opacity-100" : "opacity-0"
+                                    )}
+                                  />
+                                  {league.logo_url && (
+                                    <img src={league.logo_url} alt="" className="h-4 w-4 object-contain" />
+                                  )}
+                                  <span className="flex-1">{league.name}</span>
+                                  {league.country && <span className="text-muted-foreground text-xs">({league.country})</span>}
+                                  <button
+                                    type="button"
+                                    className="ml-2 p-0.5 hover:bg-accent rounded"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      e.preventDefault();
+                                      toggleFavoriteMutation.mutate({ leagueId: league.id, isFavorite: false });
+                                    }}
+                                  >
+                                    <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
+                                  </button>
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          )}
+                          
+                          {/* Other leagues section */}
+                          {otherLeagues.length > 0 && (
+                            <CommandGroup heading={`Toutes les ligues (${otherLeagues.length})`}>
+                              {otherLeagues.map((league) => (
+                                <CommandItem
+                                  key={league.id}
+                                  value={`${league.name} ${league.country || ''}`}
+                                  onSelect={() => {
+                                    setSelectedLeagueId(league.id);
+                                    setLeagueSearchOpen(false);
+                                  }}
+                                  className="flex items-center gap-2"
+                                >
+                                  <Check
+                                    className={cn(
+                                      "h-4 w-4",
+                                      selectedLeagueId === league.id ? "opacity-100" : "opacity-0"
+                                    )}
+                                  />
+                                  {league.logo_url && (
+                                    <img src={league.logo_url} alt="" className="h-4 w-4 object-contain" />
+                                  )}
+                                  <span className="flex-1">{league.name}</span>
+                                  {league.country && <span className="text-muted-foreground text-xs">({league.country})</span>}
+                                  <button
+                                    type="button"
+                                    className="ml-2 p-0.5 hover:bg-accent rounded"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      e.preventDefault();
+                                      toggleFavoriteMutation.mutate({ leagueId: league.id, isFavorite: true });
+                                    }}
+                                  >
+                                    <Star className="h-3.5 w-3.5 text-muted-foreground hover:text-amber-400" />
+                                  </button>
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          )}
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
                 </div>
 
                 {/* Date range */}
