@@ -104,8 +104,9 @@ serve(async (req: Request) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     );
 
-    // Upload to storage
-    const fileName = `${eventId}.${imageType}`;
+    // Upload to storage with timestamp to avoid cache issues
+    const timestamp = Date.now();
+    const fileName = `${eventId}_${timestamp}.${imageType}`;
     const contentType = `image/${imageType}`;
     
     const { error: uploadError } = await supabaseAdmin.storage
