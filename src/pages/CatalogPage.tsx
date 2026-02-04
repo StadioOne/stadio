@@ -901,7 +901,7 @@ export default function CatalogPage() {
                 ) : (
                   <Send className="h-4 w-4 mr-2" />
                 )}
-                Publier vers Événements
+                Envoyer vers Événements
               </Button>
             </div>
           </div>
