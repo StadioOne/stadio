@@ -468,14 +468,14 @@ export type Database = {
           {
             foreignKeyName: "event_pricing_event_id_fkey"
             columns: ["event_id"]
-            isOneToOne: false
+            isOneToOne: true
             referencedRelation: "events"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "event_pricing_event_id_fkey"
             columns: ["event_id"]
-            isOneToOne: false
+            isOneToOne: true
             referencedRelation: "events_published"
             referencedColumns: ["id"]
           },
