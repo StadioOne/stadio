@@ -177,20 +177,27 @@ export function CatalogTab({ sport }: CatalogTabProps) {
   const handleSaveAndPromote = async () => {
     if (!selectedEvent) return;
 
-    // Save updates first
-    await updateEventMutation.mutateAsync({
-      eventId: selectedEvent.id,
-      updates: {
-        override_title: editForm.override_title || null,
-        override_description: editForm.override_description || null,
-        override_image_url: editForm.override_image_url || null,
-        broadcaster: editForm.broadcaster || null,
-        broadcaster_logo_url: editForm.broadcaster_logo_url || null,
-      },
-    });
+    try {
+      // 1. Mise à jour silencieuse (sans toast) - appel direct à Supabase
+      const { error: updateError } = await supabase
+        .from('events')
+        .update({
+          override_title: editForm.override_title || null,
+          override_description: editForm.override_description || null,
+          override_image_url: editForm.override_image_url || null,
+          broadcaster: editForm.broadcaster || null,
+          broadcaster_logo_url: editForm.broadcaster_logo_url || null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', selectedEvent.id);
 
-    // Then promote to draft
-    await promoteToDraftMutation.mutateAsync(selectedEvent.id);
+      if (updateError) throw updateError;
+
+      // 2. Promotion vers draft (avec toast de succès)
+      await promoteToDraftMutation.mutateAsync(selectedEvent.id);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Erreur lors de la publication');
+    }
   };
 
   const handleSaveOnly = async () => {
