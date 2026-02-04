@@ -39,6 +39,9 @@ serve(async (req: Request) => {
       return errorResponse('AI service not configured', 500, 'INTERNAL_ERROR');
     }
 
+    // Enhance prompt for vertical format
+    const enhancedPrompt = `${prompt}. IMPORTANT: Generate a VERTICAL/PORTRAIT image with aspect ratio 9:16 (taller than wide).`;
+    
     // Call Lovable AI Gateway for image generation
     const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
@@ -50,7 +53,7 @@ serve(async (req: Request) => {
         model: 'google/gemini-3-pro-image-preview',
         messages: [{
           role: 'user',
-          content: prompt
+          content: enhancedPrompt
         }],
         modalities: ['image', 'text']
       })
