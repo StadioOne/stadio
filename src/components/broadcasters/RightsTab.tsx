@@ -15,6 +15,7 @@ import { RightsFilters } from './RightsFilters';
 import { RightsTable } from './RightsTable';
 import { RightsStatsCards } from './RightsStatsCards';
 import { RightsBulkDialog } from './RightsBulkDialog';
+import { RightsEditDialog } from './RightsEditDialog';
 import { useRightsEvents, useRightsStats, type RightsExclusivity, type RightsStatus, type RightWithEvent } from '@/hooks/useRightsEvents';
 import { useRightsMutations } from '@/hooks/useRightsMutations';
 
@@ -31,6 +32,7 @@ export function RightsTab({ broadcasterId, broadcasterName }: RightsTabProps) {
 
   // Dialogs
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<RightWithEvent | null>(null);
 
   // Actions
   const [revokeTarget, setRevokeTarget] = useState<RightWithEvent | null>(null);
@@ -47,8 +49,7 @@ export function RightsTab({ broadcasterId, broadcasterName }: RightsTabProps) {
   const { revokeRight, deleteRight } = useRightsMutations();
 
   const handleEdit = (right: RightWithEvent) => {
-    // TODO: Open edit dialog
-    console.log('Edit right:', right);
+    setEditTarget(right);
   };
 
   const handleRevoke = async () => {
@@ -92,6 +93,14 @@ export function RightsTab({ broadcasterId, broadcasterName }: RightsTabProps) {
         onOpenChange={setBulkDialogOpen}
       />
 
+      {/* Edit dialog */}
+      <RightsEditDialog
+        right={editTarget}
+        broadcasterId={broadcasterId}
+        open={!!editTarget}
+        onOpenChange={(open) => !open && setEditTarget(null)}
+      />
+
       {/* Table */}
       <RightsTable
         rights={rights}
@@ -115,7 +124,7 @@ export function RightsTab({ broadcasterId, broadcasterName }: RightsTabProps) {
             <AlertDialogCancel>Annuler</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleRevoke}
-              className="bg-orange-600 hover:bg-orange-700 text-white"
+              className="bg-accent text-accent-foreground hover:bg-accent/90"
             >
               Révoquer
             </AlertDialogAction>

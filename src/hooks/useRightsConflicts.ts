@@ -3,16 +3,19 @@ import { supabase } from '@/integrations/supabase/client';
 
 export interface ConflictCheckParams {
   eventIds: string[];
-  broadcasterId: string;
+  broadcasterId?: string;
+  excludeBroadcasterId?: string;
+  excludeRightId?: string;
   territories: string[];
   exclusivity: 'exclusive' | 'shared' | 'non_exclusive';
 }
 
 export interface RightsConflict {
+  rightId: string;
   eventId: string;
   eventTitle: string;
-  conflictingBroadcaster: string;
-  conflictingBroadcasterId: string;
+  broadcasterName: string;
+  broadcasterId: string;
   territories: string[];
 }
 
@@ -25,7 +28,7 @@ export function useRightsConflicts(params: ConflictCheckParams | null) {
       }
 
       // Check for existing exclusive rights on the same events/territories
-      const { data, error } = await supabase
+      let query = supabase
         .from('rights_events')
         .select(`
           id,
@@ -37,8 +40,17 @@ export function useRightsConflicts(params: ConflictCheckParams | null) {
         `)
         .in('event_id', params.eventIds)
         .eq('exclusivity', 'exclusive')
-        .eq('status', 'active')
-        .neq('broadcaster_id', params.broadcasterId);
+        .eq('status', 'active');
+
+      // Exclude the broadcaster we're assigning to (for bulk) or specific right (for edit)
+      if (params.broadcasterId) {
+        query = query.neq('broadcaster_id', params.broadcasterId);
+      }
+      if (params.excludeBroadcasterId) {
+        query = query.neq('broadcaster_id', params.excludeBroadcasterId);
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
 
@@ -46,6 +58,11 @@ export function useRightsConflicts(params: ConflictCheckParams | null) {
       const conflicts: RightsConflict[] = [];
       
       for (const right of data || []) {
+        // Skip the right being edited
+        if (params.excludeRightId && right.id === params.excludeRightId) {
+          continue;
+        }
+
         const overlappingTerritories = (right.territories_allowed as string[]).filter(
           (t) => params.territories.includes(t)
         );
@@ -55,11 +72,12 @@ export function useRightsConflicts(params: ConflictCheckParams | null) {
           const broadcaster = right.broadcasters as { name: string };
           
           conflicts.push({
+            rightId: right.id,
             eventId: right.event_id,
             eventTitle: event.override_title || event.api_title || 
               `${event.home_team || ''} vs ${event.away_team || ''}`,
-            conflictingBroadcaster: broadcaster.name,
-            conflictingBroadcasterId: right.broadcaster_id,
+            broadcasterName: broadcaster.name,
+            broadcasterId: right.broadcaster_id,
             territories: overlappingTerritories,
           });
         }

@@ -396,7 +396,7 @@ export function RightsBulkDialog({
                   <li key={conflict.eventId} className="flex items-center gap-2">
                     <span className="truncate">{conflict.eventTitle}</span>
                     <span className="text-muted-foreground">—</span>
-                    <span className="text-muted-foreground">{conflict.conflictingBroadcaster}</span>
+                    <span className="text-muted-foreground">{conflict.broadcasterName}</span>
                     <TerritoriesBadge territories={conflict.territories} max={3} />
                   </li>
                 ))}
