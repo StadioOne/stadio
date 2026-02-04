@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { format, addDays, addMonths } from "date-fns";
@@ -149,6 +149,35 @@ export default function ApiSportsSettingsPage() {
     enabled: !!selectedSport,
   });
 
+  // Fetch existing events to detect duplicates
+  const { data: existingEvents = [] } = useQuery({
+    queryKey: ['existing-events-external-ids'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('events')
+        .select('external_id, status')
+        .not('external_id', 'is', null);
+      if (error) throw error;
+      return data as { external_id: string; status: string }[];
+    },
+  });
+
+  // Create a map of external_id -> status for quick lookup
+  const existingEventsMap = useMemo(() => {
+    const map = new Map<string, string>();
+    existingEvents.forEach(e => {
+      if (e.external_id) {
+        map.set(e.external_id, e.status);
+      }
+    });
+    return map;
+  }, [existingEvents]);
+
+  // Check if a game already exists
+  const getGameStatus = (gameId: number): string | null => {
+    return existingEventsMap.get(gameId.toString()) || null;
+  };
+
   // Sync leagues mutation
   const syncLeaguesMutation = useMutation({
     mutationFn: async () => {
@@ -255,11 +284,17 @@ export default function ApiSportsSettingsPage() {
     setSelectedGames(newSet);
   };
 
+  // Compute counts for new vs existing games
+  const newGamesCount = games.filter(g => !getGameStatus(g.id)).length;
+  const duplicatesCount = games.length - newGamesCount;
+
   const toggleAllGames = () => {
-    if (selectedGames.size === games.length) {
+    // Only toggle new games (not already imported)
+    const newGames = games.filter(g => !getGameStatus(g.id));
+    if (selectedGames.size === newGames.length && newGames.length > 0) {
       setSelectedGames(new Set());
     } else {
-      setSelectedGames(new Set(games.map(g => g.id)));
+      setSelectedGames(new Set(newGames.map(g => g.id)));
     }
   };
 
@@ -641,64 +676,92 @@ export default function ApiSportsSettingsPage() {
                 {/* Selection header */}
                 <div className="flex items-center gap-4 mb-4 pb-3 border-b">
                   <Checkbox
-                    checked={selectedGames.size === games.length && games.length > 0}
+                    checked={selectedGames.size === newGamesCount && newGamesCount > 0}
                     onCheckedChange={toggleAllGames}
                   />
                   <span className="text-sm text-muted-foreground">
-                    {selectedGames.size} / {games.length} sélectionné(s)
+                    {selectedGames.size} sélectionné(s) • {newGamesCount} nouveau{newGamesCount > 1 ? 'x' : ''}
+                    {duplicatesCount > 0 && (
+                      <span className="text-amber-600 ml-2">
+                        ({duplicatesCount} déjà importé{duplicatesCount > 1 ? 's' : ''})
+                      </span>
+                    )}
                   </span>
                 </div>
 
                 <ScrollArea className="h-[400px]">
                   <div className="space-y-2 pr-4">
-                    {games.map((game) => (
-                      <div
-                        key={game.id}
-                        className={cn(
-                          "flex items-center gap-4 p-3 rounded-lg border cursor-pointer transition-colors",
-                          selectedGames.has(game.id) && "border-primary bg-primary/5"
-                        )}
-                        onClick={() => toggleGame(game.id)}
-                      >
-                        <Checkbox
-                          checked={selectedGames.has(game.id)}
-                          onCheckedChange={() => toggleGame(game.id)}
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                        
-                        {/* Teams */}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            {game.homeTeam.logo && (
-                              <img src={game.homeTeam.logo} alt="" className="h-5 w-5 object-contain" />
-                            )}
-                            <span className="font-medium">{game.homeTeam.name}</span>
-                            <span className="text-muted-foreground">vs</span>
-                            {game.awayTeam.logo && (
-                              <img src={game.awayTeam.logo} alt="" className="h-5 w-5 object-contain" />
-                            )}
-                            <span className="font-medium">{game.awayTeam.name}</span>
-                          </div>
-                          {game.league?.round && (
-                            <div className="text-sm text-muted-foreground mt-1">
-                              {game.league.round}
-                            </div>
+                    {games.map((game) => {
+                      const existingStatus = getGameStatus(game.id);
+                      const isDuplicate = !!existingStatus;
+                      
+                      return (
+                        <div
+                          key={game.id}
+                          className={cn(
+                            "flex items-center gap-4 p-3 rounded-lg border cursor-pointer transition-colors",
+                            selectedGames.has(game.id) && "border-primary bg-primary/5",
+                            isDuplicate && !selectedGames.has(game.id) && "opacity-60 bg-muted/30"
                           )}
-                        </div>
-
-                        {/* Date */}
-                        <div className="text-right flex-shrink-0">
-                          <div className="text-sm font-medium">
-                            {format(new Date(game.date), "dd MMM", { locale: fr })}
+                          onClick={() => toggleGame(game.id)}
+                        >
+                          <Checkbox
+                            checked={selectedGames.has(game.id)}
+                            onCheckedChange={() => toggleGame(game.id)}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                          
+                          {/* Teams */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {game.homeTeam.logo && (
+                                <img src={game.homeTeam.logo} alt="" className="h-5 w-5 object-contain" />
+                              )}
+                              <span className="font-medium">{game.homeTeam.name}</span>
+                              <span className="text-muted-foreground">vs</span>
+                              {game.awayTeam.logo && (
+                                <img src={game.awayTeam.logo} alt="" className="h-5 w-5 object-contain" />
+                              )}
+                              <span className="font-medium">{game.awayTeam.name}</span>
+                            </div>
+                            {game.league?.round && (
+                              <div className="text-sm text-muted-foreground mt-1">
+                                {game.league.round}
+                              </div>
+                            )}
                           </div>
-                          <div className="text-sm text-muted-foreground">
-                            {format(new Date(game.date), "HH:mm")}
-                          </div>
-                        </div>
 
-                        <Badge variant="outline">{game.status}</Badge>
-                      </div>
-                    ))}
+                          {/* Date */}
+                          <div className="text-right flex-shrink-0">
+                            <div className="text-sm font-medium">
+                              {format(new Date(game.date), "dd MMM", { locale: fr })}
+                            </div>
+                            <div className="text-sm text-muted-foreground">
+                              {format(new Date(game.date), "HH:mm")}
+                            </div>
+                          </div>
+
+                          {/* Status badge for duplicates */}
+                          {isDuplicate && (
+                            <Badge 
+                              variant="outline"
+                              className={cn(
+                                existingStatus === 'catalog' && "bg-green-100 text-green-700 border-green-300 dark:bg-green-900/30 dark:text-green-400 dark:border-green-700",
+                                existingStatus === 'draft' && "bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-700",
+                                existingStatus === 'published' && "bg-blue-100 text-blue-700 border-blue-300 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-700"
+                              )}
+                            >
+                              <CheckCircle2 className="h-3 w-3 mr-1" />
+                              {existingStatus === 'catalog' && 'Catalogue'}
+                              {existingStatus === 'draft' && 'Brouillon'}
+                              {existingStatus === 'published' && 'Publié'}
+                            </Badge>
+                          )}
+
+                          <Badge variant="outline">{game.status}</Badge>
+                        </div>
+                      );
+                    })}
                   </div>
                 </ScrollArea>
               </>
