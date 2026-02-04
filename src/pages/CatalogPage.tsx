@@ -767,9 +767,10 @@ export default function CatalogPage() {
                 {editForm.override_image_url && (
                   <div className="relative">
                     <img 
-                      src={editForm.override_image_url} 
+                      src={`${editForm.override_image_url}${editForm.override_image_url.includes('?') ? '&' : '?'}t=${Date.now()}`} 
                       alt="Preview" 
                       className="w-full h-32 object-cover rounded-lg border"
+                      key={editForm.override_image_url}
                     />
                     <div className="absolute top-2 right-2 flex gap-1">
                       {!showManualImageUrl && (
