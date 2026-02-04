@@ -65,7 +65,7 @@ export function useLeaguesForSelect() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('leagues')
-        .select('id, name, country')
+        .select('id, name, name_fr, country, sport_id')
         .eq('is_active', true)
         .order('name');
 

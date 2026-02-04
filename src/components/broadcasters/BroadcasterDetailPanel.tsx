@@ -1,4 +1,4 @@
-import { Mail, Building2 } from 'lucide-react';
+import { Mail } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
@@ -9,6 +9,7 @@ import {
 } from '@/components/ui/sheet';
 import { BroadcasterStatusBadge } from './BroadcasterStatusBadge';
 import { RightsTab } from './RightsTab';
+import { PackagesTab } from './PackagesTab';
 import type { BroadcasterWithStats } from '@/hooks/useBroadcasters';
 
 interface BroadcasterDetailPanelProps {
@@ -77,10 +78,7 @@ export function BroadcasterDetailPanel({
           </TabsContent>
 
           <TabsContent value="packages" className="mt-4">
-            <div className="text-center py-8 text-muted-foreground">
-              <Building2 className="h-8 w-8 mx-auto mb-2 opacity-50" />
-              <p>La gestion des contrats sera disponible prochainement.</p>
-            </div>
+            <PackagesTab broadcasterId={broadcaster.id} broadcasterName={broadcaster.name} />
           </TabsContent>
 
           <TabsContent value="users" className="mt-4">
