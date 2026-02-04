@@ -62,3 +62,6 @@ verify_jwt = false
 
 [functions.admin-ai-description]
 verify_jwt = false
+
+[functions.admin-ai-image]
+verify_jwt = false

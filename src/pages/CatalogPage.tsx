@@ -42,9 +42,11 @@ import {
   DollarSign,
   Edit,
   ImageIcon,
+  Link2,
   Loader2,
   Package,
   Radio,
+  RefreshCw,
   Send,
   Trash2,
   Trophy,
@@ -101,6 +103,9 @@ export default function CatalogPage() {
     manual_tier: "" as PricingTier | "",
   });
   const [isGeneratingDescription, setIsGeneratingDescription] = useState(false);
+  const [isGeneratingImage, setIsGeneratingImage] = useState(false);
+  const [imagePrompt, setImagePrompt] = useState("");
+  const [showManualImageUrl, setShowManualImageUrl] = useState(false);
 
   // Fetch all sports
   const { data: sports = [] } = useQuery({
@@ -233,6 +238,27 @@ export default function CatalogPage() {
     },
   });
 
+  // Generate default image prompt based on event data
+  const generateDefaultImagePrompt = (event: CatalogEvent) => {
+    const parts = [`Affiche promotionnelle moderne pour un match de ${event.sport}`];
+    
+    if (event.home_team && event.away_team) {
+      parts.push(`entre ${event.home_team} et ${event.away_team}`);
+    }
+    
+    if (event.league) {
+      parts.push(`en ${event.league}`);
+    }
+    
+    parts.push(
+      'Style: dynamique, couleurs vives, ambiance de stade',
+      'format horizontal 16:9, qualité professionnelle',
+      'sans texte ni logo'
+    );
+    
+    return parts.join('. ') + '.';
+  };
+
   const openEditSheet = (event: CatalogEvent) => {
     setSelectedEvent(event);
     setEditForm({
@@ -244,6 +270,8 @@ export default function CatalogPage() {
       manual_price: "",
       manual_tier: "",
     });
+    setImagePrompt(generateDefaultImagePrompt(event));
+    setShowManualImageUrl(!!event.override_image_url);
   };
 
   const handleSaveAndPromote = async () => {
@@ -327,6 +355,54 @@ export default function CatalogPage() {
       toast.error(error instanceof Error ? error.message : 'Erreur lors de la génération');
     } finally {
       setIsGeneratingDescription(false);
+    }
+  };
+
+  const handleGenerateImage = async () => {
+    if (!selectedEvent || !imagePrompt.trim()) {
+      toast.error('Veuillez saisir un prompt pour l\'image');
+      return;
+    }
+
+    setIsGeneratingImage(true);
+    try {
+      const session = await supabase.auth.getSession();
+      if (!session.data.session) {
+        toast.error('Non authentifié');
+        return;
+      }
+
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-ai-image`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.data.session.access_token}`,
+          },
+          body: JSON.stringify({
+            prompt: imagePrompt,
+            eventId: selectedEvent.id,
+          }),
+        }
+      );
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Erreur lors de la génération');
+      }
+
+      setEditForm(prev => ({
+        ...prev,
+        override_image_url: result.data.imageUrl,
+      }));
+      toast.success('Image générée avec succès');
+    } catch (error) {
+      console.error('Error generating image:', error);
+      toast.error(error instanceof Error ? error.message : 'Erreur lors de la génération');
+    } finally {
+      setIsGeneratingImage(false);
     }
   };
 
@@ -603,23 +679,120 @@ export default function CatalogPage() {
               />
             </div>
 
-            {/* Image URL */}
-            <div className="space-y-2">
-              <Label htmlFor="override_image_url">URL de l'image</Label>
-              <Input
-                id="override_image_url"
-                placeholder="https://..."
-                value={editForm.override_image_url}
-                onChange={(e) => setEditForm(prev => ({ ...prev, override_image_url: e.target.value }))}
-              />
-              {editForm.override_image_url && (
-                <img 
-                  src={editForm.override_image_url} 
-                  alt="Preview" 
-                  className="mt-2 h-24 w-auto object-contain rounded border"
-                />
-              )}
-            </div>
+            {/* Image Section */}
+            <Card className="bg-muted/30 border-dashed">
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <ImageIcon className="h-4 w-4" />
+                    Image de l'événement
+                  </CardTitle>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant={!showManualImageUrl ? "secondary" : "ghost"}
+                      size="sm"
+                      onClick={() => setShowManualImageUrl(false)}
+                      className="text-xs h-7"
+                    >
+                      <Sparkles className="h-3 w-3 mr-1" />
+                      IA
+                    </Button>
+                    <Button
+                      variant={showManualImageUrl ? "secondary" : "ghost"}
+                      size="sm"
+                      onClick={() => setShowManualImageUrl(true)}
+                      className="text-xs h-7"
+                    >
+                      <Link2 className="h-3 w-3 mr-1" />
+                      URL
+                    </Button>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {!showManualImageUrl ? (
+                  <>
+                    {/* AI Prompt Input */}
+                    <div className="space-y-2">
+                      <Label htmlFor="image_prompt" className="text-xs text-muted-foreground">
+                        Prompt pour l'IA
+                      </Label>
+                      <Textarea
+                        id="image_prompt"
+                        placeholder="Décrivez l'image souhaitée..."
+                        value={imagePrompt}
+                        onChange={(e) => setImagePrompt(e.target.value)}
+                        rows={3}
+                        className="text-sm"
+                      />
+                    </div>
+                    
+                    {/* Generate Button */}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleGenerateImage}
+                      disabled={isGeneratingImage || !imagePrompt.trim()}
+                      className="w-full gap-2"
+                    >
+                      {isGeneratingImage ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Génération en cours...
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="h-4 w-4" />
+                          Générer l'image
+                        </>
+                      )}
+                    </Button>
+                  </>
+                ) : (
+                  /* Manual URL Input */
+                  <div className="space-y-2">
+                    <Label htmlFor="override_image_url" className="text-xs text-muted-foreground">
+                      URL de l'image
+                    </Label>
+                    <Input
+                      id="override_image_url"
+                      placeholder="https://..."
+                      value={editForm.override_image_url}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, override_image_url: e.target.value }))}
+                    />
+                  </div>
+                )}
+
+                {/* Image Preview */}
+                {editForm.override_image_url && (
+                  <div className="relative">
+                    <img 
+                      src={editForm.override_image_url} 
+                      alt="Preview" 
+                      className="w-full h-32 object-cover rounded-lg border"
+                    />
+                    <div className="absolute top-2 right-2 flex gap-1">
+                      {!showManualImageUrl && (
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          onClick={handleGenerateImage}
+                          disabled={isGeneratingImage}
+                          className="h-7 gap-1"
+                        >
+                          <RefreshCw className={`h-3 w-3 ${isGeneratingImage ? 'animate-spin' : ''}`} />
+                          Régénérer
+                        </Button>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1 truncate">
+                      {editForm.override_image_url}
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
 
             {/* Broadcaster */}
             <div className="space-y-2">
