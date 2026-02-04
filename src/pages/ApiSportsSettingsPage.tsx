@@ -36,6 +36,7 @@ import {
   Trophy,
   Package,
   ArrowRight,
+  Star,
 } from "lucide-react";
 
 interface Sport {
@@ -57,6 +58,7 @@ interface League {
   country: string | null;
   season: number | null;
   is_synced: boolean | null;
+  is_favorite: boolean | null;
 }
 
 interface Game {
@@ -134,11 +136,49 @@ export default function ApiSportsSettingsPage() {
         .select('*')
         .eq('sport_id', selectedSport.id)
         .eq('is_synced', true)
+        .order('is_favorite', { ascending: false })
         .order('name');
       if (error) throw error;
       return data as League[];
     },
     enabled: !!selectedSport,
+  });
+
+  // Sync leagues mutation
+  const syncLeaguesMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedSport) throw new Error('Sport non sélectionné');
+      return callSportSyncEndpoint({
+        action: 'sync_leagues',
+        sport: selectedSport.slug,
+      });
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['sport-leagues-synced'] });
+      toast.success(`${result.data?.synced || 0} ligue(s) synchronisée(s)`);
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : 'Erreur de synchronisation');
+    },
+  });
+
+  // Toggle favorite mutation
+  const toggleFavoriteMutation = useMutation({
+    mutationFn: async ({ leagueId, isFavorite }: { leagueId: string; isFavorite: boolean }) => {
+      const { error } = await supabase
+        .from('leagues')
+        .update({ is_favorite: isFavorite })
+        .eq('id', leagueId);
+      if (error) throw error;
+      return isFavorite;
+    },
+    onSuccess: (isFavorite) => {
+      queryClient.invalidateQueries({ queryKey: ['sport-leagues-synced'] });
+      toast.success(isFavorite ? 'Ajouté aux favoris' : 'Retiré des favoris');
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : 'Erreur');
+    },
   });
 
   // Fetch games preview
@@ -197,6 +237,8 @@ export default function ApiSportsSettingsPage() {
 
   const games = gamesData?.games || [];
   const selectedLeague = leagues.find(l => l.id === selectedLeagueId);
+  const favoriteLeagues = leagues.filter(l => l.is_favorite);
+  const otherLeagues = leagues.filter(l => !l.is_favorite);
 
   const toggleGame = (gameId: number) => {
     const newSet = new Set(selectedGames);
@@ -321,25 +363,99 @@ export default function ApiSportsSettingsPage() {
               </div>
             ) : (
               <>
-                {/* League selector */}
-                <div>
-                  <label className="text-sm font-medium mb-2 block">Ligue</label>
+                {/* League selector with favorites */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-medium">Ligue</label>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => syncLeaguesMutation.mutate()}
+                      disabled={syncLeaguesMutation.isPending}
+                    >
+                      {syncLeaguesMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <Download className="h-4 w-4 mr-2" />
+                      )}
+                      Synchroniser les ligues
+                    </Button>
+                  </div>
+                  
                   <Select value={selectedLeagueId} onValueChange={setSelectedLeagueId}>
                     <SelectTrigger className="w-full max-w-md">
                       <SelectValue placeholder="Sélectionnez une ligue" />
                     </SelectTrigger>
                     <SelectContent>
-                      {leagues.map((league) => (
-                        <SelectItem key={league.id} value={league.id}>
-                          <div className="flex items-center gap-2">
-                            {league.logo_url && (
-                              <img src={league.logo_url} alt="" className="h-4 w-4 object-contain" />
-                            )}
-                            {league.name}
-                            {league.country && <span className="text-muted-foreground">({league.country})</span>}
+                      {/* Favorites section */}
+                      {favoriteLeagues.length > 0 && (
+                        <>
+                          <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground flex items-center gap-1">
+                            <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
+                            Favoris ({favoriteLeagues.length})
                           </div>
-                        </SelectItem>
-                      ))}
+                          {favoriteLeagues.map((league) => (
+                            <SelectItem key={league.id} value={league.id}>
+                              <div className="flex items-center gap-2 w-full">
+                                {league.logo_url && (
+                                  <img src={league.logo_url} alt="" className="h-4 w-4 object-contain" />
+                                )}
+                                <span className="flex-1">{league.name}</span>
+                                {league.country && <span className="text-muted-foreground text-xs">({league.country})</span>}
+                                <button
+                                  type="button"
+                                  className="ml-2 p-0.5 hover:bg-accent rounded"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    e.preventDefault();
+                                    toggleFavoriteMutation.mutate({ leagueId: league.id, isFavorite: false });
+                                  }}
+                                >
+                                  <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
+                                </button>
+                              </div>
+                            </SelectItem>
+                          ))}
+                          <Separator className="my-1" />
+                        </>
+                      )}
+                      
+                      {/* Other leagues section */}
+                      {otherLeagues.length > 0 && (
+                        <>
+                          <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
+                            Toutes les ligues ({otherLeagues.length})
+                          </div>
+                          {otherLeagues.map((league) => (
+                            <SelectItem key={league.id} value={league.id}>
+                              <div className="flex items-center gap-2 w-full">
+                                {league.logo_url && (
+                                  <img src={league.logo_url} alt="" className="h-4 w-4 object-contain" />
+                                )}
+                                <span className="flex-1">{league.name}</span>
+                                {league.country && <span className="text-muted-foreground text-xs">({league.country})</span>}
+                                <button
+                                  type="button"
+                                  className="ml-2 p-0.5 hover:bg-accent rounded"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    e.preventDefault();
+                                    toggleFavoriteMutation.mutate({ leagueId: league.id, isFavorite: true });
+                                  }}
+                                >
+                                  <Star className="h-3.5 w-3.5 text-muted-foreground hover:text-yellow-400" />
+                                </button>
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </>
+                      )}
+                      
+                      {leagues.length === 0 && (
+                        <div className="px-2 py-4 text-center text-sm text-muted-foreground">
+                          Aucune ligue disponible. Cliquez sur "Synchroniser les ligues".
+                        </div>
+                      )}
                     </SelectContent>
                   </Select>
                 </div>

@@ -643,6 +643,7 @@ export type Database = {
           external_id: string
           id: string
           is_active: boolean | null
+          is_favorite: boolean | null
           is_synced: boolean | null
           logo_url: string | null
           name: string
@@ -659,6 +660,7 @@ export type Database = {
           external_id: string
           id?: string
           is_active?: boolean | null
+          is_favorite?: boolean | null
           is_synced?: boolean | null
           logo_url?: string | null
           name: string
@@ -675,6 +677,7 @@ export type Database = {
           external_id?: string
           id?: string
           is_active?: boolean | null
+          is_favorite?: boolean | null
           is_synced?: boolean | null
           logo_url?: string | null
           name?: string
