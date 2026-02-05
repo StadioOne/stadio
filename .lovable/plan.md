@@ -1,335 +1,248 @@
 
-# Plan : Implémentation complète de la page Tarification
+# Plan : Amélioration de la gestion des événements
 
-## Contexte Stadio Admin
+## Objectif
 
-Cette page s'intègre dans l'écosystème Stadio Admin qui gère un service de streaming sportif pay-per-view. Le système de tarification est un élément central du business model :
+Ajouter deux nouvelles fonctionnalités à la page Événements :
 
-- **3 tiers tarifaires** : Bronze (4.99-14.99€), Silver (9.99-24.99€), Gold (14.99-49.99€)
-- **Calcul automatique** basé sur la ligue, le statut épinglé, le live
-- **Overrides manuels** possibles pour les admins/owners
-- **Historique complet** via `event_pricing_history`
-- **Edge Function existante** : `admin-pricing-recompute` (batch + single event)
+1. **Statut temporel dynamique** : "À venir", "En cours", "Terminé" basé sur `event_date`
+2. **Actions Archiver et Supprimer** : accessibles depuis les menus d'actions de chaque événement
 
-## Architecture de la page
+## Architecture actuelle vs future
 
 ```text
-┌──────────────────────────────────────────────────────────────────────────┐
-│  Header: "Tarification"                    [Recalculer tous les prix]   │
-│  Sous-titre: "Gestion des prix et tiers"                                 │
-├──────────────────────────────────────────────────────────────────────────┤
-│  Stats: [Total] [Bronze: XX] [Silver: XX] [Gold: XX] [Manuels: XX]      │
-├──────────────────────────────────────────────────────────────────────────┤
-│  Tabs: [ Configuration ] [ Événements ] [ Historique ]                  │
-├──────────────────────────────────────────────────────────────────────────┤
-│                                                                          │
-│  Tab "Configuration" (owner only):                                       │
-│  ┌────────────────────────────────────────────────────────────────────┐ │
-│  │ Tier     │ Min    │ Base   │ Max    │ Actions                      │ │
-│  │──────────│────────│────────│────────│──────────────────────────────│ │
-│  │ Gold     │ 14.99€ │ 24.99€ │ 49.99€ │ [Modifier]                   │ │
-│  │ Silver   │ 9.99€  │ 14.99€ │ 24.99€ │ [Modifier]                   │ │
-│  │ Bronze   │ 4.99€  │ 9.99€  │ 14.99€ │ [Modifier]                   │ │
-│  └────────────────────────────────────────────────────────────────────┘ │
-│                                                                          │
-│  Tab "Événements":                                                       │
-│  ┌────────────────────────────────────────────────────────────────────┐ │
-│  │ Filtres: [Tier ▼] [Override ▼] [Statut ▼] [Recherche...]          │ │
-│  ├────────────────────────────────────────────────────────────────────┤ │
-│  │ Table:                                                              │ │
-│  │ Événement        │ Sport    │ Ligue    │ Tier   │ Prix   │ Type   │ │
-│  │ Arsenal vs Liver │ Football │ PL       │ [Gold] │ 24.99€ │ [Calc] │ │
-│  │ PSG vs Marseille │ Football │ Ligue 1  │ [Gold] │ 19.99€ │ [Man]  │ │
-│  └────────────────────────────────────────────────────────────────────┘ │
-│                                                                          │
-│  Tab "Historique":                                                       │
-│  ┌────────────────────────────────────────────────────────────────────┐ │
-│  │ Timeline des changements avec diff avant/après                     │ │
-│  │ Date        │ Événement    │ Avant    │ Après    │ Type   │ Par   │ │
-│  │ 04/02 19:35 │ PSG vs OM    │ Silver   │ Gold     │ Manual │ Admin │ │
-│  │ 04/02 19:15 │ Bayern vs BVB│ -        │ Bronze   │ Init   │ Sys   │ │
-│  └────────────────────────────────────────────────────────────────────┘ │
-│                                                                          │
-└──────────────────────────────────────────────────────────────────────────┘
+ACTUEL:
+┌─────────────────────────────────────┐
+│ Statut éditorial uniquement:        │
+│ [Brouillon] [Publié] [Archivé]      │
+│                                     │
+│ Actions disponibles:                │
+│ - Publier / Dépublier               │
+│ - Démarrer/Arrêter le direct        │
+│ - Épingler / Désépingler            │
+└─────────────────────────────────────┘
+
+FUTUR:
+┌─────────────────────────────────────────────────────────────┐
+│ Double affichage des statuts:                               │
+│                                                             │
+│ Statut éditorial: [Brouillon] [Publié] [Archivé]           │
+│ Statut temporel:  [À venir]   [En cours] [Terminé]         │
+│                                                             │
+│ Nouvelles actions:                                          │
+│ - Archiver (passage en status = 'archived')                │
+│ - Supprimer (soft delete ou suppression définitive)        │
+└─────────────────────────────────────────────────────────────┘
 ```
+
+## Logique du statut temporel
+
+Le statut temporel sera calculé dynamiquement côté client :
+
+| Statut | Condition |
+|--------|-----------|
+| **À venir** | `event_date > now()` |
+| **En cours** | `event_date <= now() AND event_date + durée > now()` (ou `is_live = true`) |
+| **Terminé** | `event_date + durée < now()` |
+
+Pour simplifier (pas de durée stockée), on utilisera :
+- **À venir** : Date de l'événement dans le futur
+- **En cours** : `is_live = true` OU événement dans les dernières 3h
+- **Terminé** : Date passée de plus de 3h et `is_live = false`
 
 ## Fichiers à créer
 
 | Fichier | Description |
 |---------|-------------|
-| `src/hooks/usePricing.ts` | Hook combiné pour pricing config, events avec pricing, et historique |
-| `src/hooks/usePricingMutations.ts` | Mutations pour update config, batch recompute |
-| `src/components/pricing/PricingStats.tsx` | Cards de statistiques par tier |
-| `src/components/pricing/PricingFilters.tsx` | Filtres tier/override/status/search |
-| `src/components/pricing/PricingConfigTab.tsx` | Tableau de configuration des tiers |
-| `src/components/pricing/PricingEventsTab.tsx` | Liste des événements avec pricing |
-| `src/components/pricing/PricingEventsRow.tsx` | Ligne du tableau événements |
-| `src/components/pricing/PricingHistoryTab.tsx` | Timeline de l'historique |
-| `src/components/pricing/PricingHistoryRow.tsx` | Ligne de l'historique |
-| `src/components/pricing/PricingEditDialog.tsx` | Modal d'édition tier/prix |
-| `src/components/pricing/PricingConfigEditDialog.tsx` | Modal édition config tier |
+| `src/components/events/TimeStatusBadge.tsx` | Badge pour afficher À venir / En cours / Terminé |
+| `src/components/events/DeleteEventDialog.tsx` | Modal de confirmation de suppression |
 
 ## Fichiers à modifier
 
-| Fichier | Modification |
-|---------|--------------|
-| `src/pages/PricingPage.tsx` | Refonte complète avec tabs et composants |
-| `src/lib/api.ts` | Ajouter méthode `pricing.updateConfig` |
-| `src/lib/api-types.ts` | Ajouter types pour PricingConfig, PricingHistory |
+| Fichier | Modifications |
+|---------|---------------|
+| `src/hooks/useEvents.ts` | Ajouter filtre `timeStatus` (upcoming/ongoing/finished) |
+| `src/hooks/useEventMutations.ts` | Ajouter `useArchiveEvent()` et `useDeleteEvent()` |
+| `src/components/events/EventFilters.tsx` | Ajouter pills pour filtrer par statut temporel |
+| `src/components/events/EventCard.tsx` | Afficher TimeStatusBadge + actions Archiver/Supprimer |
+| `src/components/events/EventRow.tsx` | Afficher TimeStatusBadge + actions Archiver/Supprimer |
+| `src/components/events/EventDetailPanel.tsx` | Ajouter boutons Archiver/Supprimer en footer |
+| `src/components/events/EventsStats.tsx` | Ajouter stats pour À venir / En cours / Terminé |
+| `src/pages/EventsPage.tsx` | Intégrer nouveaux handlers et état pour la modal de suppression |
 
 ## Détails techniques
 
-### Hook `usePricing.ts`
+### 1. Composant `TimeStatusBadge.tsx`
 
 ```typescript
-// Récupère la configuration des tiers
-export function usePricingConfig() {
-  return useQuery({
-    queryKey: ['pricing', 'config'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('pricing_config')
-        .select('*')
-        .order('tier');
-      if (error) throw error;
-      return data;
-    }
-  });
+type TimeStatus = 'upcoming' | 'ongoing' | 'finished';
+
+function getTimeStatus(eventDate: string, isLive: boolean): TimeStatus {
+  const now = new Date();
+  const date = new Date(eventDate);
+  const threeHoursAgo = new Date(now.getTime() - 3 * 60 * 60 * 1000);
+
+  if (isLive) return 'ongoing';
+  if (date > now) return 'upcoming';
+  if (date > threeHoursAgo) return 'ongoing';
+  return 'finished';
 }
 
-// Récupère les événements avec pricing
-export function useEventsPricing(filters: PricingFilters) {
-  return useQuery({
-    queryKey: ['pricing', 'events', filters],
-    queryFn: async () => {
-      let query = supabase
-        .from('events')
-        .select(`
-          id, api_title, override_title, sport, league, 
-          event_date, status, home_team, away_team,
-          pricing:event_pricing(*)
-        `, { count: 'exact' })
-        .in('status', ['draft', 'published']);
-      
-      // Appliquer filtres...
-      return query;
-    }
-  });
-}
-
-// Stats par tier
-export function usePricingStats() {
-  return useQuery({
-    queryKey: ['pricing', 'stats'],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from('event_pricing')
-        .select('computed_tier, is_manual_override');
-      
-      return {
-        total: data?.length || 0,
-        gold: data?.filter(p => p.computed_tier === 'gold').length || 0,
-        silver: data?.filter(p => p.computed_tier === 'silver').length || 0,
-        bronze: data?.filter(p => p.computed_tier === 'bronze').length || 0,
-        manual: data?.filter(p => p.is_manual_override).length || 0,
-      };
-    }
-  });
-}
-
-// Historique des modifications
-export function usePricingHistory(limit = 50) {
-  return useQuery({
-    queryKey: ['pricing', 'history', limit],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('event_pricing_history')
-        .select(`
-          id, previous_price, new_price, previous_tier, new_tier,
-          change_type, changed_by, created_at,
-          event_pricing:event_pricing_id(
-            event:event_id(id, api_title, override_title, sport, league)
-          ),
-          actor:changed_by(email, full_name)
-        `)
-        .order('created_at', { ascending: false })
-        .limit(limit);
-      
-      if (error) throw error;
-      return data;
-    }
-  });
-}
+// Badges avec couleurs:
+// À venir: bleu (bg-blue-500/10 text-blue-600)
+// En cours: vert pulsant (bg-green-500/10 text-green-600 animate-pulse)
+// Terminé: gris (bg-muted text-muted-foreground)
 ```
 
-### Hook `usePricingMutations.ts`
+### 2. Hook `useArchiveEvent`
 
 ```typescript
-// Mise à jour config tier (owner only)
-export function useUpdatePricingConfig() {
-  const queryClient = useQueryClient();
-  
+export function useArchiveEvent() {
   return useMutation({
-    mutationFn: async ({ tierId, data }: { tierId: string; data: Partial<PricingConfig> }) => {
-      const { data: updated, error } = await supabase
-        .from('pricing_config')
-        .update({ ...data, updated_at: new Date().toISOString() })
-        .eq('id', tierId)
+    mutationFn: async (eventId: string) => {
+      const { data, error } = await supabase
+        .from('events')
+        .update({ status: 'archived', updated_at: new Date().toISOString() })
+        .eq('id', eventId)
         .select()
         .single();
-      
       if (error) throw error;
-      return updated;
+      return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['pricing', 'config'] });
-      toast.success('Configuration mise à jour');
-    },
-    onError: (error) => {
-      toast.error(handleApiError(error));
-    }
-  });
-}
-
-// Recalcul batch (admin+)
-export function useBatchRecompute() {
-  const queryClient = useQueryClient();
-  
-  return useMutation({
-    mutationFn: () => adminApi.pricing.recompute({ batch: true }),
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['pricing'] });
-      queryClient.invalidateQueries({ queryKey: ['events'] });
-      toast.success(`${data.processed} événements recalculés`);
-    },
-    onError: (error) => {
-      toast.error(handleApiError(error));
+      queryClient.invalidateQueries({ queryKey: eventQueryKeys.all });
+      toast.success('Événement archivé');
     }
   });
 }
 ```
 
-### Composant `PricingStats.tsx`
-
-Reprend le pattern de `EventsStats.tsx` avec les icônes des tiers :
+### 3. Hook `useDeleteEvent`
 
 ```typescript
-const stats = [
-  { label: 'Total', value: total, icon: DollarSign, className: 'text-foreground' },
-  { label: 'Gold', value: gold, icon: Crown, className: 'text-tier-gold' },
-  { label: 'Silver', value: silver, icon: Medal, className: 'text-tier-silver' },
-  { label: 'Bronze', value: bronze, icon: Award, className: 'text-tier-bronze' },
-  { label: 'Manuels', value: manual, icon: PenLine, className: 'text-warning' },
+export function useDeleteEvent() {
+  return useMutation({
+    mutationFn: async (eventId: string) => {
+      // Suppression en cascade : pricing d'abord, puis événement
+      await supabase.from('event_pricing').delete().eq('event_id', eventId);
+      const { error } = await supabase.from('events').delete().eq('id', eventId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: eventQueryKeys.all });
+      toast.success('Événement supprimé');
+    }
+  });
+}
+```
+
+### 4. Mise à jour des filtres
+
+Ajout d'un nouveau groupe de pills dans `EventFilters.tsx` :
+
+```typescript
+const TIME_STATUS_OPTIONS = [
+  { value: 'all', label: 'Tous', icon: Clock },
+  { value: 'upcoming', label: 'À venir', icon: CalendarClock },
+  { value: 'ongoing', label: 'En cours', icon: Play },
+  { value: 'finished', label: 'Terminés', icon: CheckCircle2 },
 ];
 ```
 
-### Composant `PricingFilters.tsx`
+### 5. Mise à jour du menu d'actions
 
-Inspiré de `EventFilters.tsx` avec les filtres spécifiques :
-
-- **Tier** : All / Gold / Silver / Bronze
-- **Type** : All / Calculé / Manuel
-- **Statut** : All / Draft / Published
-- **Recherche** : par titre/équipe/ligue
-
-### Page `PricingPage.tsx`
-
-Structure avec tabs suivant le pattern existant :
+Dans `EventCard.tsx` et `EventRow.tsx` :
 
 ```typescript
-export default function PricingPage() {
-  const { t } = useTranslation();
-  const { role, hasRole } = useAuth();
-  const [activeTab, setActiveTab] = useState<'config' | 'events' | 'history'>('events');
-  
-  const { data: stats, isLoading: statsLoading } = usePricingStats();
-  const batchRecompute = useBatchRecompute();
-  
-  const canEditConfig = hasRole('owner');
-  const canBatchRecompute = hasRole(['admin']);
-  
-  return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <DollarSign className="h-6 w-6 text-primary" />
-            {t('pricing.title')}
-          </h1>
-          <p className="text-muted-foreground text-sm">{t('pricing.subtitle')}</p>
-        </div>
-        {canBatchRecompute && (
-          <Button onClick={() => batchRecompute.mutate()} disabled={batchRecompute.isPending}>
-            <RefreshCw className={cn("h-4 w-4 mr-2", batchRecompute.isPending && "animate-spin")} />
-            Recalculer tous les prix
-          </Button>
-        )}
-      </div>
-      
-      {/* Stats */}
-      <PricingStats {...stats} isLoading={statsLoading} />
-      
-      {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList>
-          {canEditConfig && <TabsTrigger value="config">Configuration</TabsTrigger>}
-          <TabsTrigger value="events">Événements</TabsTrigger>
-          <TabsTrigger value="history">Historique</TabsTrigger>
-        </TabsList>
-        
-        <TabsContent value="config">
-          <PricingConfigTab />
-        </TabsContent>
-        <TabsContent value="events">
-          <PricingEventsTab />
-        </TabsContent>
-        <TabsContent value="history">
-          <PricingHistoryTab />
-        </TabsContent>
-      </Tabs>
-    </div>
-  );
-}
+<DropdownMenuSeparator />
+
+<DropdownMenuItem onClick={() => onArchive?.(event.id)}>
+  <Archive className="h-4 w-4 mr-2" />
+  Archiver
+</DropdownMenuItem>
+
+<DropdownMenuItem 
+  onClick={() => onDelete?.(event.id)}
+  className="text-destructive focus:text-destructive"
+>
+  <Trash2 className="h-4 w-4 mr-2" />
+  Supprimer
+</DropdownMenuItem>
 ```
 
-## Réutilisation des composants existants
+### 6. Modal de confirmation
 
-| Composant | Utilisation |
-|-----------|-------------|
-| `TierBadge` | Affichage des tiers Gold/Silver/Bronze |
-| `OverrideBadge` | Distinction Calculé vs Manuel |
-| `StatusBadge` | Statut draft/published |
-| `Sheet` | Panel de détail événement |
-| `Table` | Tableaux config/events/historique |
-| `Tabs` | Navigation entre les sections |
-| `Skeleton` | États de chargement |
-| `Pagination` | Liste événements |
+```typescript
+<AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+  <AlertDialogContent>
+    <AlertDialogHeader>
+      <AlertDialogTitle>Supprimer l'événement ?</AlertDialogTitle>
+      <AlertDialogDescription>
+        Cette action est irréversible. L'événement "{eventToDelete?.title}" 
+        et toutes ses données associées seront définitivement supprimés.
+      </AlertDialogDescription>
+    </AlertDialogHeader>
+    <AlertDialogFooter>
+      <AlertDialogCancel>Annuler</AlertDialogCancel>
+      <AlertDialogAction 
+        onClick={confirmDelete}
+        className="bg-destructive text-destructive-foreground"
+      >
+        Supprimer
+      </AlertDialogAction>
+    </AlertDialogFooter>
+  </AlertDialogContent>
+</AlertDialog>
+```
 
-## Permissions par rôle
+## Mise à jour des statistiques
 
-| Action | owner | admin | editor | support |
-|--------|-------|-------|--------|---------|
-| Voir la page | oui | oui | oui | oui |
-| Voir config tiers | oui | oui | oui | oui |
-| Modifier config tiers | oui | non | non | non |
-| Modifier prix événement | oui | oui | non | non |
-| Recalcul batch | oui | oui | non | non |
-| Voir historique | oui | oui | oui | oui |
+`EventsStats.tsx` affichera deux lignes :
 
-## Intégration avec l'existant
+```text
+Ligne 1 (Éditorial): Total | Publiés | Brouillons | Archivés
+Ligne 2 (Temporel):  À venir | En cours | Terminés
+```
 
-- **`useEventMutations.ts`** : Réutilise `useUpdateEventPricing` et `useRecomputeEventPricing`
-- **`adminApi.pricing`** : Utilise les méthodes existantes
-- **`EventDetailPanel`** : Logique pricing déjà implémentée, réutilisable
-- **Traductions** : Clés `pricing.*` déjà définies dans i18n.ts
+## Interface utilisateur finale
+
+```text
+┌──────────────────────────────────────────────────────────────────────┐
+│  Événements                                                          │
+├──────────────────────────────────────────────────────────────────────┤
+│  Stats: [120 Total] [45 Publiés] [8 Live] [67 Brouillons]           │
+│         [52 À venir] [3 En cours] [65 Terminés]                     │
+├──────────────────────────────────────────────────────────────────────┤
+│  Filtres:                                                            │
+│  Statut: [Tous] [Brouillon] [Publié] [Archivé]                      │
+│  Temps:  [Tous] [À venir] [En cours] [Terminés]                     │
+│  + Sport, Ligue, Live, Épinglés                                     │
+├──────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                  │
+│  │  [Football] │  │  [Football] │  │  [Tennis]   │                  │
+│  │  [À venir]  │  │  [En cours] │  │  [Terminé]  │                  │
+│  │  [Publié]   │  │  [Publié]   │  │  [Brouillon]│                  │
+│  │  PSG vs OM  │  │  Lyon vs... │  │  Nadal vs...│                  │
+│  │  [...menu]  │  │  [...menu]  │  │  [...menu]  │                  │
+│  │  - Dépublier│  │  - Dépublier│  │  - Publier  │                  │
+│  │  - Archiver │  │  - Archiver │  │  - Archiver │                  │
+│  │  - Supprimer│  │  - Supprimer│  │  - Supprimer│                  │
+│  └─────────────┘  └─────────────┘  └─────────────┘                  │
+│                                                                      │
+└──────────────────────────────────────────────────────────────────────┘
+```
+
+## Sécurité
+
+- La suppression nécessite une confirmation explicite via AlertDialog
+- Seuls les événements non-publiés ou archivés peuvent être supprimés (optionnel selon besoin)
+- L'archivage est réversible (un événement archivé peut être remis en brouillon)
 
 ## Tests à effectuer
 
-1. Vérifier l'affichage des stats par tier
-2. Modifier la config d'un tier (owner) et valider la contrainte min < base < max
-3. Filtrer les événements par tier/type
-4. Modifier manuellement le prix d'un événement
-5. Lancer un recalcul batch et vérifier les résultats
-6. Consulter l'historique des modifications
-7. Vérifier les permissions selon le rôle connecté
+1. Vérifier l'affichage du badge temporel sur les cartes et lignes
+2. Tester le filtre par statut temporel
+3. Archiver un événement et vérifier le changement de statut
+4. Supprimer un événement et confirmer la suppression
+5. Vérifier que les stats se mettent à jour correctement
