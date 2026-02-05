@@ -1,5 +1,4 @@
-import { useTranslation } from 'react-i18next';
-import { Calendar, Eye, Radio, FileEdit } from 'lucide-react';
+import { Calendar, Eye, Radio, FileEdit, Archive, CalendarClock, Play, CheckCircle2 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 
@@ -8,6 +7,10 @@ interface EventsStatsProps {
   published: number;
   live: number;
   draft: number;
+  archived?: number;
+  upcoming?: number;
+  ongoing?: number;
+  finished?: number;
   isLoading?: boolean;
 }
 
@@ -16,11 +19,13 @@ export function EventsStats({
   published,
   live,
   draft,
+  archived = 0,
+  upcoming = 0,
+  ongoing = 0,
+  finished = 0,
   isLoading,
 }: EventsStatsProps) {
-  const { t } = useTranslation();
-
-  const stats = [
+  const editorialStats = [
     {
       label: 'Total',
       value: total,
@@ -45,34 +50,89 @@ export function EventsStats({
       icon: FileEdit,
       className: 'text-muted-foreground',
     },
+    {
+      label: 'Archivés',
+      value: archived,
+      icon: Archive,
+      className: 'text-muted-foreground',
+    },
+  ];
+
+  const temporalStats = [
+    {
+      label: 'À venir',
+      value: upcoming,
+      icon: CalendarClock,
+      className: 'text-blue-600 dark:text-blue-400',
+    },
+    {
+      label: 'En cours',
+      value: ongoing,
+      icon: Play,
+      className: 'text-green-600 dark:text-green-400',
+    },
+    {
+      label: 'Terminés',
+      value: finished,
+      icon: CheckCircle2,
+      className: 'text-muted-foreground',
+    },
   ];
 
   if (isLoading) {
     return (
-      <div className="flex items-center gap-6">
-        {stats.map((_, i) => (
-          <div key={i} className="flex items-center gap-2">
-            <Skeleton className="h-4 w-4 rounded" />
-            <Skeleton className="h-4 w-16" />
-          </div>
-        ))}
+      <div className="space-y-2">
+        <div className="flex items-center gap-6">
+          {editorialStats.map((_, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <Skeleton className="h-4 w-4 rounded" />
+              <Skeleton className="h-4 w-16" />
+            </div>
+          ))}
+        </div>
+        <div className="flex items-center gap-6">
+          {temporalStats.map((_, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <Skeleton className="h-4 w-4 rounded" />
+              <Skeleton className="h-4 w-16" />
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="flex items-center gap-6">
-      {stats.map((stat) => (
-        <div key={stat.label} className="flex items-center gap-2">
-          <stat.icon className={cn('h-4 w-4', stat.className)} />
-          <span className="text-sm">
-            <span className={cn('font-semibold', stat.className)}>
-              {stat.value}
+    <div className="space-y-2">
+      {/* Editorial Stats */}
+      <div className="flex items-center gap-6">
+        {editorialStats.map((stat) => (
+          <div key={stat.label} className="flex items-center gap-2">
+            <stat.icon className={cn('h-4 w-4', stat.className)} />
+            <span className="text-sm">
+              <span className={cn('font-semibold', stat.className)}>
+                {stat.value}
+              </span>
+              <span className="text-muted-foreground ml-1">{stat.label}</span>
             </span>
-            <span className="text-muted-foreground ml-1">{stat.label}</span>
-          </span>
-        </div>
-      ))}
+          </div>
+        ))}
+      </div>
+
+      {/* Temporal Stats */}
+      <div className="flex items-center gap-6">
+        {temporalStats.map((stat) => (
+          <div key={stat.label} className="flex items-center gap-2">
+            <stat.icon className={cn('h-4 w-4', stat.className)} />
+            <span className="text-sm">
+              <span className={cn('font-semibold', stat.className)}>
+                {stat.value}
+              </span>
+              <span className="text-muted-foreground ml-1">{stat.label}</span>
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

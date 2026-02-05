@@ -149,18 +149,39 @@ export function useEventsStats() {
   return useQuery({
     queryKey: eventQueryKeys.stats,
     queryFn: async () => {
-      const [totalRes, publishedRes, liveRes, draftRes] = await Promise.all([
-        supabase.from('events').select('id', { count: 'exact', head: true }),
+      const now = new Date().toISOString();
+      const threeHoursAgo = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
+
+      const [
+        totalRes,
+        publishedRes,
+        liveRes,
+        draftRes,
+        archivedRes,
+        upcomingRes,
+        finishedRes,
+      ] = await Promise.all([
+        supabase.from('events').select('id', { count: 'exact', head: true }).neq('status', 'catalog'),
         supabase.from('events').select('id', { count: 'exact', head: true }).eq('status', 'published'),
         supabase.from('events').select('id', { count: 'exact', head: true }).eq('is_live', true),
         supabase.from('events').select('id', { count: 'exact', head: true }).eq('status', 'draft'),
+        supabase.from('events').select('id', { count: 'exact', head: true }).eq('status', 'archived'),
+        supabase.from('events').select('id', { count: 'exact', head: true }).gt('event_date', now).neq('status', 'catalog'),
+        supabase.from('events').select('id', { count: 'exact', head: true }).lt('event_date', threeHoursAgo).eq('is_live', false).neq('status', 'catalog'),
       ]);
+
+      // Ongoing = live OR (event_date <= now AND event_date > threeHoursAgo)
+      const ongoing = (liveRes.count || 0);
 
       return {
         total: totalRes.count || 0,
         published: publishedRes.count || 0,
         live: liveRes.count || 0,
         draft: draftRes.count || 0,
+        archived: archivedRes.count || 0,
+        upcoming: upcomingRes.count || 0,
+        ongoing,
+        finished: finishedRes.count || 0,
       };
     },
     staleTime: 1000 * 60, // 1 minute

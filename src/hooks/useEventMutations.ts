@@ -179,3 +179,54 @@ export function useTogglePinned() {
     },
   });
 }
+
+export function useArchiveEvent() {
+  const queryClient = useQueryClient();
+  const { t } = useTranslation();
+
+  return useMutation({
+    mutationFn: async (eventId: string) => {
+      const { data, error } = await supabase
+        .from('events')
+        .update({ status: 'archived', updated_at: new Date().toISOString() })
+        .eq('id', eventId)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (_, eventId) => {
+      queryClient.invalidateQueries({ queryKey: eventQueryKeys.all });
+      queryClient.invalidateQueries({ queryKey: eventQueryKeys.detail(eventId) });
+      toast.success(t('events.archiveSuccess', 'Événement archivé'));
+    },
+    onError: (error) => {
+      toast.error(handleApiError(error));
+    },
+  });
+}
+
+export function useDeleteEvent() {
+  const queryClient = useQueryClient();
+  const { t } = useTranslation();
+
+  return useMutation({
+    mutationFn: async (eventId: string) => {
+      // Delete related data first (cascade)
+      await supabase.from('event_pricing').delete().eq('event_id', eventId);
+      await supabase.from('event_categories').delete().eq('event_id', eventId);
+      
+      const { error } = await supabase.from('events').delete().eq('id', eventId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: eventQueryKeys.all });
+      queryClient.invalidateQueries({ queryKey: eventQueryKeys.stats });
+      toast.success(t('events.deleteSuccess', 'Événement supprimé'));
+    },
+    onError: (error) => {
+      toast.error(handleApiError(error));
+    },
+  });
+}
