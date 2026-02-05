@@ -34,9 +34,11 @@ import {
   Loader2,
   Radio,
   Send,
+  Sparkles,
   Trophy,
 } from "lucide-react";
 import type { Database } from "@/integrations/supabase/types";
+import { AIImageDialog } from "./AIImageDialog";
 
 type PricingTier = Database["public"]["Enums"]["pricing_tier"];
 
@@ -73,6 +75,7 @@ interface CatalogTabProps {
 export function CatalogTab({ sport }: CatalogTabProps) {
   const queryClient = useQueryClient();
   const [selectedEvent, setSelectedEvent] = useState<CatalogEvent | null>(null);
+  const [aiDialogOpen, setAiDialogOpen] = useState(false);
   const [editForm, setEditForm] = useState({
     override_title: "",
     override_description: "",
@@ -349,7 +352,17 @@ export function CatalogTab({ sport }: CatalogTabProps) {
 
             {/* Image URL */}
             <div className="space-y-2">
-              <Label htmlFor="override_image_url">URL de l'image</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="override_image_url">URL de l'image</Label>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setAiDialogOpen(true)}
+                >
+                  <Sparkles className="h-3 w-3 mr-1" />
+                  Générer avec IA
+                </Button>
+              </div>
               <Input
                 id="override_image_url"
                 placeholder="https://..."
@@ -458,6 +471,16 @@ export function CatalogTab({ sport }: CatalogTabProps) {
           </div>
         </SheetContent>
       </Sheet>
+
+      {/* AI Image Dialog */}
+      <AIImageDialog
+        event={selectedEvent}
+        open={aiDialogOpen}
+        onOpenChange={setAiDialogOpen}
+        onImageGenerated={(imageUrl) => {
+          setEditForm(prev => ({ ...prev, override_image_url: imageUrl }));
+        }}
+      />
     </>
   );
 }
