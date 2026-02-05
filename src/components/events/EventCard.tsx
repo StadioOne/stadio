@@ -1,6 +1,6 @@
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import { MoreHorizontal, Eye, EyeOff, Radio, Pin, PinOff } from 'lucide-react';
+import { MoreHorizontal, Eye, EyeOff, Radio, Pin, PinOff, Archive, Trash2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -17,6 +17,7 @@ import { OverrideBadge } from '@/components/admin/OverrideBadge';
 import { LiveBadge } from './LiveBadge';
 import { PinnedBadge } from './PinnedBadge';
 import { GeoRestrictionBadge } from './GeoRestrictionBadge';
+import { TimeStatusBadge } from './TimeStatusBadge';
 import { cn } from '@/lib/utils';
 import type { EventWithPricing } from '@/hooks/useEvents';
 
@@ -26,6 +27,8 @@ interface EventCardProps {
   onUnpublish?: (id: string) => void;
   onToggleLive?: (id: string, isLive: boolean) => void;
   onTogglePinned?: (id: string, isPinned: boolean) => void;
+  onArchive?: (id: string) => void;
+  onDelete?: (id: string) => void;
   onSelect?: (event: EventWithPricing) => void;
   index?: number;
 }
@@ -36,6 +39,8 @@ export function EventCard({
   onUnpublish,
   onToggleLive,
   onTogglePinned,
+  onArchive,
+  onDelete,
   onSelect,
   index = 0,
 }: EventCardProps) {
@@ -89,6 +94,13 @@ export function EventCard({
               <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-black/50 text-white backdrop-blur-sm">
                 {event.sport}
               </span>
+            )}
+            {event.event_date && (
+              <TimeStatusBadge
+                eventDate={event.event_date}
+                isLive={event.is_live || false}
+                showLabel={false}
+              />
             )}
           </div>
 
@@ -171,6 +183,23 @@ export function EventCard({
                       Épingler
                     </>
                   )}
+                </DropdownMenuItem>
+
+                <DropdownMenuSeparator />
+
+                {event.status !== 'archived' && (
+                  <DropdownMenuItem onClick={() => onArchive?.(event.id)}>
+                    <Archive className="h-4 w-4 mr-2" />
+                    Archiver
+                  </DropdownMenuItem>
+                )}
+
+                <DropdownMenuItem
+                  onClick={() => onDelete?.(event.id)}
+                  className="text-destructive focus:text-destructive focus:bg-destructive/10"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Supprimer
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

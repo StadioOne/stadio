@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { motion } from 'framer-motion';
 import { Calendar } from 'lucide-react';
@@ -27,13 +27,17 @@ import {
   useRecomputeEventPricing,
   useToggleLive,
   useTogglePinned,
+  useArchiveEvent,
+  useDeleteEvent,
 } from '@/hooks/useEventMutations';
-import { EventFilters } from '@/components/events/EventFilters';
+import { EventFilters, type TimeStatusFilter } from '@/components/events/EventFilters';
 import { EventsStats } from '@/components/events/EventsStats';
 import { EventCard } from '@/components/events/EventCard';
 import { EventRow } from '@/components/events/EventRow';
 import { EventsEmptyState } from '@/components/events/EventsEmptyState';
 import { EventDetailPanel } from '@/components/events/EventDetailPanel';
+import { DeleteEventDialog } from '@/components/events/DeleteEventDialog';
+import { getTimeStatus, type TimeStatus } from '@/components/events/TimeStatusBadge';
 import type { EventPricingUpdate } from '@/lib/api-types';
 
 const ITEMS_PER_PAGE = 20;
@@ -47,6 +51,8 @@ export default function EventsPage() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [selectedEvent, setSelectedEvent] = useState<EventWithPricing | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [timeStatus, setTimeStatus] = useState<TimeStatusFilter>('all');
+  const [eventToDelete, setEventToDelete] = useState<EventWithPricing | null>(null);
 
   // Data fetching
   const { data, isLoading, error } = useEvents(filters);
@@ -60,10 +66,27 @@ export default function EventsPage() {
   const recomputePricingMutation = useRecomputeEventPricing();
   const toggleLiveMutation = useToggleLive();
   const togglePinnedMutation = useTogglePinned();
+  const archiveMutation = useArchiveEvent();
+  const deleteMutation = useDeleteEvent();
+
+  // Filter events by time status (client-side)
+  const filteredEvents = useMemo(() => {
+    if (!data?.data || timeStatus === 'all') return data?.data || [];
+    
+    return data.data.filter((event) => {
+      if (!event.event_date) return false;
+      const eventTimeStatus = getTimeStatus(event.event_date, event.is_live || false);
+      return eventTimeStatus === timeStatus;
+    });
+  }, [data?.data, timeStatus]);
 
   // Handlers
   const handleFiltersChange = useCallback((newFilters: EventsFilters) => {
     setFilters(newFilters);
+  }, []);
+
+  const handleTimeStatusChange = useCallback((status: TimeStatusFilter) => {
+    setTimeStatus(status);
   }, []);
 
   const handleSelectEvent = useCallback((event: EventWithPricing) => {
@@ -98,12 +121,36 @@ export default function EventsPage() {
     togglePinnedMutation.mutate({ id, isPinned });
   }, [togglePinnedMutation]);
 
+  const handleArchive = useCallback((id: string) => {
+    archiveMutation.mutate(id);
+  }, [archiveMutation]);
+
+  const handleDeleteRequest = useCallback((id: string) => {
+    const event = data?.data.find((e) => e.id === id);
+    if (event) {
+      setEventToDelete(event);
+    }
+  }, [data?.data]);
+
+  const handleConfirmDelete = useCallback(() => {
+    if (eventToDelete) {
+      deleteMutation.mutate(eventToDelete.id, {
+        onSuccess: () => {
+          setEventToDelete(null);
+          if (selectedEvent?.id === eventToDelete.id) {
+            setSelectedEvent(null);
+          }
+        },
+      });
+    }
+  }, [eventToDelete, deleteMutation, selectedEvent]);
+
   const handleSaveEvent = useCallback((id: string, eventData: any) => {
     updateMutation.mutate({ id, data: eventData });
   }, [updateMutation]);
 
-  const handleUpdatePricing = useCallback((eventId: string, data: EventPricingUpdate) => {
-    updatePricingMutation.mutate({ eventId, data });
+  const handleUpdatePricing = useCallback((eventId: string, pricingData: EventPricingUpdate) => {
+    updatePricingMutation.mutate({ eventId, data: pricingData });
   }, [updatePricingMutation]);
 
   const handleRecomputePricing = useCallback((eventId: string) => {
@@ -112,6 +159,7 @@ export default function EventsPage() {
 
   const handleClearFilters = useCallback(() => {
     setFilters({ limit: ITEMS_PER_PAGE, offset: 0 });
+    setTimeStatus('all');
   }, []);
 
   // Pagination
@@ -131,7 +179,8 @@ export default function EventsPage() {
     filters.league ||
     filters.isLive ||
     filters.isPinned ||
-    filters.search
+    filters.search ||
+    timeStatus !== 'all'
   );
 
   return (
@@ -155,6 +204,10 @@ export default function EventsPage() {
         published={stats?.published || 0}
         live={stats?.live || 0}
         draft={stats?.draft || 0}
+        archived={stats?.archived || 0}
+        upcoming={stats?.upcoming || 0}
+        ongoing={stats?.ongoing || 0}
+        finished={stats?.finished || 0}
         isLoading={statsLoading}
       />
 
@@ -166,6 +219,8 @@ export default function EventsPage() {
         onViewModeChange={setViewMode}
         sports={data?.sports || []}
         leagues={data?.leagues || []}
+        timeStatus={timeStatus}
+        onTimeStatusChange={handleTimeStatusChange}
       />
 
       {/* Content */}
@@ -179,7 +234,7 @@ export default function EventsPage() {
         <div className="text-center py-12">
           <p className="text-destructive">{t('common.errorOccurred')}</p>
         </div>
-      ) : !data?.data.length ? (
+      ) : !filteredEvents.length ? (
         <EventsEmptyState
           hasFilters={hasActiveFilters}
           onClearFilters={handleClearFilters}
@@ -190,7 +245,7 @@ export default function EventsPage() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
         >
-          {data.data.map((event, index) => (
+          {filteredEvents.map((event, index) => (
             <EventCard
               key={event.id}
               event={event}
@@ -200,6 +255,8 @@ export default function EventsPage() {
               onUnpublish={handleUnpublish}
               onToggleLive={handleToggleLive}
               onTogglePinned={handleTogglePinned}
+              onArchive={handleArchive}
+              onDelete={handleDeleteRequest}
             />
           ))}
         </motion.div>
@@ -220,7 +277,7 @@ export default function EventsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {data.data.map((event, index) => (
+              {filteredEvents.map((event, index) => (
                 <EventRow
                   key={event.id}
                   event={event}
@@ -232,6 +289,8 @@ export default function EventsPage() {
                   onUnpublish={handleUnpublish}
                   onToggleLive={handleToggleLive}
                   onTogglePinned={handleTogglePinned}
+                  onArchive={handleArchive}
+                  onDelete={handleDeleteRequest}
                 />
               ))}
             </TableBody>
@@ -283,8 +342,19 @@ export default function EventsPage() {
         onRecomputePricing={handleRecomputePricing}
         onPublish={handlePublish}
         onUnpublish={handleUnpublish}
+        onArchive={handleArchive}
+        onDelete={handleDeleteRequest}
         isSaving={updateMutation.isPending || updatePricingMutation.isPending}
         isRecomputing={recomputePricingMutation.isPending}
+      />
+
+      {/* Delete Confirmation Dialog */}
+      <DeleteEventDialog
+        open={!!eventToDelete}
+        onOpenChange={(open) => !open && setEventToDelete(null)}
+        eventTitle={eventToDelete?.override_title || eventToDelete?.api_title || 'Sans titre'}
+        onConfirm={handleConfirmDelete}
+        isDeleting={deleteMutation.isPending}
       />
     </div>
   );

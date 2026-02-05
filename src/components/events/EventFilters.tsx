@@ -1,9 +1,8 @@
 import { useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Search, LayoutGrid, List, Radio, Star, X } from 'lucide-react';
+import { Search, LayoutGrid, List, Radio, Star, X, Clock, CalendarClock, Play, CheckCircle2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Toggle } from '@/components/ui/toggle';
 import {
   Select,
@@ -16,6 +15,7 @@ import { cn } from '@/lib/utils';
 import type { EventsFilters } from '@/hooks/useEvents';
 
 type ViewMode = 'grid' | 'list';
+export type TimeStatusFilter = 'all' | 'upcoming' | 'ongoing' | 'finished';
 
 interface EventFiltersProps {
   filters: EventsFilters;
@@ -24,6 +24,8 @@ interface EventFiltersProps {
   onViewModeChange: (mode: ViewMode) => void;
   sports: string[];
   leagues: string[];
+  timeStatus: TimeStatusFilter;
+  onTimeStatusChange: (status: TimeStatusFilter) => void;
 }
 
 const STATUS_OPTIONS = [
@@ -33,6 +35,13 @@ const STATUS_OPTIONS = [
   { value: 'archived', label: 'Archivé' },
 ] as const;
 
+const TIME_STATUS_OPTIONS = [
+  { value: 'all', label: 'Tous', icon: Clock },
+  { value: 'upcoming', label: 'À venir', icon: CalendarClock },
+  { value: 'ongoing', label: 'En cours', icon: Play },
+  { value: 'finished', label: 'Terminés', icon: CheckCircle2 },
+] as const;
+
 export function EventFilters({
   filters,
   onFiltersChange,
@@ -40,6 +49,8 @@ export function EventFilters({
   onViewModeChange,
   sports,
   leagues,
+  timeStatus,
+  onTimeStatusChange,
 }: EventFiltersProps) {
   const { t } = useTranslation();
   const [searchValue, setSearchValue] = useState(filters.search || '');
@@ -99,6 +110,7 @@ export function EventFilters({
 
   const clearFilters = () => {
     setSearchValue('');
+    onTimeStatusChange('all');
     onFiltersChange({
       limit: filters.limit,
       offset: 0,
@@ -112,7 +124,8 @@ export function EventFilters({
     filters.league ||
     filters.isLive ||
     filters.isPinned ||
-    filters.search;
+    filters.search ||
+    timeStatus !== 'all';
 
   // Filter leagues based on selected sport (if sport data is available)
   const filteredLeagues = filters.sport
@@ -180,6 +193,31 @@ export function EventFilters({
               {option.label}
             </button>
           ))}
+        </div>
+
+        <div className="h-4 w-px bg-border" />
+
+        {/* Time Status Pills */}
+        <div className="flex items-center gap-1">
+          {TIME_STATUS_OPTIONS.map((option) => {
+            const Icon = option.icon;
+            return (
+              <button
+                key={option.value}
+                onClick={() => onTimeStatusChange(option.value as TimeStatusFilter)}
+                className={cn(
+                  'px-3 py-1.5 text-sm font-medium rounded-full transition-colors flex items-center gap-1.5',
+                  timeStatus === option.value &&
+                    'bg-secondary text-secondary-foreground',
+                  timeStatus !== option.value &&
+                    'bg-muted/50 hover:bg-muted text-muted-foreground'
+                )}
+              >
+                <Icon className="h-3.5 w-3.5" />
+                {option.label}
+              </button>
+            );
+          })}
         </div>
 
         <div className="h-4 w-px bg-border" />

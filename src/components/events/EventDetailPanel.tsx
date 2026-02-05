@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import { Save, RefreshCw, Loader2 } from 'lucide-react';
+import { Save, RefreshCw, Loader2, Archive, Trash2 } from 'lucide-react';
 import {
   Sheet,
   SheetContent,
@@ -26,6 +26,7 @@ import {
 import { StatusBadge } from '@/components/admin/StatusBadge';
 import { TierBadge } from '@/components/admin/TierBadge';
 import { LiveBadge } from './LiveBadge';
+import { TimeStatusBadge } from './TimeStatusBadge';
 import { CountryTagsInput } from './CountryTagsInput';
 import type { EventWithPricing } from '@/hooks/useEvents';
 import type { EventUpdate, PricingTier, EventPricingUpdate } from '@/lib/api-types';
@@ -39,6 +40,8 @@ interface EventDetailPanelProps {
   onRecomputePricing?: (eventId: string) => void;
   onPublish?: (id: string) => void;
   onUnpublish?: (id: string) => void;
+  onArchive?: (id: string) => void;
+  onDelete?: (id: string) => void;
   isSaving?: boolean;
   isRecomputing?: boolean;
 }
@@ -52,6 +55,8 @@ export function EventDetailPanel({
   onRecomputePricing,
   onPublish,
   onUnpublish,
+  onArchive,
+  onDelete,
   isSaving,
   isRecomputing,
 }: EventDetailPanelProps) {
@@ -141,6 +146,12 @@ export function EventDetailPanel({
             </SheetTitle>
             <div className="flex items-center gap-2">
               {event.is_live && <LiveBadge />}
+              {event.event_date && (
+                <TimeStatusBadge
+                  eventDate={event.event_date}
+                  isLive={event.is_live || false}
+                />
+              )}
               <StatusBadge status={event.status} />
             </div>
           </div>
@@ -400,38 +411,64 @@ export function EventDetailPanel({
         </div>
 
         {/* Footer Actions */}
-        <div className="sticky bottom-0 pt-4 pb-2 mt-6 bg-background border-t flex items-center gap-2">
-          {event.status === 'draft' && onPublish && (
-            <Button
-              variant="default"
-              onClick={() => onPublish(event.id)}
-              className="flex-1"
-            >
-              Publier
-            </Button>
-          )}
-          {event.status === 'published' && onUnpublish && (
-            <Button
-              variant="outline"
-              onClick={() => onUnpublish(event.id)}
-              className="flex-1"
-            >
-              Dépublier
-            </Button>
-          )}
-          <Button
-            variant={hasChanges ? 'default' : 'secondary'}
-            onClick={handleSave}
-            disabled={!hasChanges || isSaving}
-            className="flex-1 gap-2"
-          >
-            {isSaving ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Save className="h-4 w-4" />
+        <div className="sticky bottom-0 pt-4 pb-2 mt-6 bg-background border-t space-y-2">
+          <div className="flex items-center gap-2">
+            {event.status === 'draft' && onPublish && (
+              <Button
+                variant="default"
+                onClick={() => onPublish(event.id)}
+                className="flex-1"
+              >
+                Publier
+              </Button>
             )}
-            {isSaving ? 'Enregistrement...' : 'Enregistrer'}
-          </Button>
+            {event.status === 'published' && onUnpublish && (
+              <Button
+                variant="outline"
+                onClick={() => onUnpublish(event.id)}
+                className="flex-1"
+              >
+                Dépublier
+              </Button>
+            )}
+            <Button
+              variant={hasChanges ? 'default' : 'secondary'}
+              onClick={handleSave}
+              disabled={!hasChanges || isSaving}
+              className="flex-1 gap-2"
+            >
+              {isSaving ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Save className="h-4 w-4" />
+              )}
+              {isSaving ? 'Enregistrement...' : 'Enregistrer'}
+            </Button>
+          </div>
+
+          {/* Archive and Delete Actions */}
+          <div className="flex items-center gap-2">
+            {event.status !== 'archived' && onArchive && (
+              <Button
+                variant="outline"
+                onClick={() => onArchive(event.id)}
+                className="flex-1 gap-2"
+              >
+                <Archive className="h-4 w-4" />
+                Archiver
+              </Button>
+            )}
+            {onDelete && (
+              <Button
+                variant="outline"
+                onClick={() => onDelete(event.id)}
+                className="flex-1 gap-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+              >
+                <Trash2 className="h-4 w-4" />
+                Supprimer
+              </Button>
+            )}
+          </div>
         </div>
       </SheetContent>
     </Sheet>
