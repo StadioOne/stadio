@@ -238,25 +238,33 @@ export default function CatalogPage() {
     },
   });
 
-  // Generate default image prompt based on event data
+  // Generate default image prompt based on event data - Cinematic template
   const generateDefaultImagePrompt = (event: CatalogEvent) => {
-    const parts = [`Affiche promotionnelle moderne pour un match de ${event.sport}`];
+    const eventName = event.override_title || event.api_title || 
+      `${event.home_team || ''} vs ${event.away_team || ''}`.trim() || 'Sports Event';
+    const eventDate = format(new Date(event.event_date), "EEEE d MMMM yyyy", { locale: fr });
+    const eventTime = format(new Date(event.event_date), "HH:mm", { locale: fr });
     
-    if (event.home_team && event.away_team) {
-      parts.push(`entre ${event.home_team} et ${event.away_team}`);
-    }
-    
-    if (event.league) {
-      parts.push(`en ${event.league}`);
-    }
-    
-    parts.push(
-      'Style: dynamique, couleurs vives, ambiance de stade',
-      'format VERTICAL portrait 9:16, qualité professionnelle',
-      'sans texte ni logo'
-    );
-    
-    return parts.join('. ') + '.';
+    return `Create a vertical cinematic poster (2:3 ratio) for a sports event, designed like a premium movie poster, with dramatic lighting, high contrast, and epic composition.
+
+Event: ${eventName}
+Sport: ${event.sport || 'Football'}
+Competition / League: ${event.league || 'Competition'}
+Event Date: ${eventDate}
+Event Time: ${eventTime}
+Venue / City: ${event.venue || 'Stadium'}
+
+Visual style: cinematic, realistic, ultra-detailed, shallow depth of field, sharp focus, 4K, film grain, soft volumetric lighting, dramatic shadows.
+
+Color grading: high-contrast, teal & orange cinematic palette, adapted to team colors.
+
+Branding: subtle modern sports atmosphere, no real logos, no watermarks, no platform logos.
+
+Rights & permissions: The user owns and is authorized to use all requested likenesses and visual references.
+
+Camera: low-angle shot, 85mm lens look, dramatic perspective.
+
+Final output: vertical poster, 1024x1536 or higher, suitable for mobile app thumbnail.`;
   };
 
   const openEditSheet = (event: CatalogEvent) => {
@@ -724,15 +732,15 @@ export default function CatalogPage() {
                     {/* AI Prompt Input */}
                     <div className="space-y-2">
                       <Label htmlFor="image_prompt" className="text-xs text-muted-foreground">
-                        Prompt pour l'IA
+                        Prompt pour l'IA (modifiable)
                       </Label>
                       <Textarea
                         id="image_prompt"
                         placeholder="Décrivez l'image souhaitée..."
                         value={imagePrompt}
                         onChange={(e) => setImagePrompt(e.target.value)}
-                        rows={3}
-                        className="text-sm"
+                        rows={10}
+                        className="text-xs font-mono"
                       />
                     </div>
                     
