@@ -30,7 +30,12 @@ Deno.serve(async (req) => {
       });
     }
 
-    const stadioClient = createClient(stadioUrl, stadioKey);
+    const stadioClient = createClient(stadioUrl, stadioKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    });
 
     switch (action) {
       case 'list': {
