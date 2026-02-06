@@ -560,6 +560,7 @@ export type Database = {
           sport: string
           sport_id: string | null
           status: Database["public"]["Enums"]["content_status"]
+          thumbnail_url: string | null
           updated_at: string
           updated_by: string | null
           venue: string | null
@@ -598,6 +599,7 @@ export type Database = {
           sport: string
           sport_id?: string | null
           status?: Database["public"]["Enums"]["content_status"]
+          thumbnail_url?: string | null
           updated_at?: string
           updated_by?: string | null
           venue?: string | null
@@ -636,6 +638,7 @@ export type Database = {
           sport?: string
           sport_id?: string | null
           status?: Database["public"]["Enums"]["content_status"]
+          thumbnail_url?: string | null
           updated_at?: string
           updated_by?: string | null
           venue?: string | null
