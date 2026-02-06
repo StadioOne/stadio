@@ -1,25 +1,17 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
-import { UserPlus } from 'lucide-react';
-import { useUsers, useUsersStats, type UsersFilters, type UserWithRole } from '@/hooks/useUsers';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { UserPlus, Shield, Smartphone } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { UserStats } from '@/components/users/UserStats';
-import { UserFilters } from '@/components/users/UserFilters';
-import { UserTable } from '@/components/users/UserTable';
-import { UserDetailPanel } from '@/components/users/UserDetailPanel';
+import { AdminUsersTab } from '@/components/users/AdminUsersTab';
+import { AppUsersTab } from '@/components/users/AppUsersTab';
 import { AddUserDialog } from '@/components/users/AddUserDialog';
 
 export default function UsersPage() {
   const { t } = useTranslation();
   const { role } = useAuth();
-  
-  const [filters, setFilters] = useState<UsersFilters>({});
-  const [selectedUser, setSelectedUser] = useState<UserWithRole | null>(null);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
-
-  const { data: users, isLoading } = useUsers(filters);
-  const { data: stats, isLoading: statsLoading } = useUsersStats();
 
   const isOwner = role === 'owner';
 
@@ -39,29 +31,29 @@ export default function UsersPage() {
         )}
       </div>
 
-      {/* Stats */}
-      <UserStats stats={stats} isLoading={statsLoading} />
+      {/* Tabs */}
+      <Tabs defaultValue="admins">
+        <TabsList>
+          <TabsTrigger value="admins" className="gap-2">
+            <Shield className="h-4 w-4" />
+            {t('users.tabs.admins')}
+          </TabsTrigger>
+          <TabsTrigger value="app" className="gap-2">
+            <Smartphone className="h-4 w-4" />
+            {t('users.tabs.appUsers')}
+          </TabsTrigger>
+        </TabsList>
 
-      {/* Filters */}
-      <UserFilters filters={filters} onFiltersChange={setFilters} />
+        <TabsContent value="admins">
+          <AdminUsersTab />
+        </TabsContent>
 
-      {/* Table */}
-      <UserTable
-        users={users}
-        isLoading={isLoading}
-        filters={filters}
-        onSelectUser={setSelectedUser}
-      />
+        <TabsContent value="app">
+          <AppUsersTab />
+        </TabsContent>
+      </Tabs>
 
-      {/* Detail Panel */}
-      <UserDetailPanel
-        user={selectedUser}
-        isOpen={!!selectedUser}
-        onClose={() => setSelectedUser(null)}
-        isOwner={isOwner}
-      />
-
-      {/* Add User Dialog */}
+      {/* Add Admin Dialog */}
       <AddUserDialog
         isOpen={isAddDialogOpen}
         onClose={() => setIsAddDialogOpen(false)}

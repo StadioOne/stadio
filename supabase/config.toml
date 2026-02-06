@@ -68,3 +68,6 @@ verify_jwt = false
 
 [functions.admin-ai-suggest-price]
 verify_jwt = false
+
+[functions.admin-app-users]
+verify_jwt = false
