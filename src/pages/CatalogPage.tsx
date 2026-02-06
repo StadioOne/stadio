@@ -71,10 +71,13 @@ interface CatalogEvent {
   league_id: string | null;
   home_team: string | null;
   away_team: string | null;
+  home_team_id: string | null;
+  away_team_id: string | null;
   api_title: string | null;
   override_title: string | null;
   override_description: string | null;
   override_image_url: string | null;
+  thumbnail_url: string | null;
   event_date: string;
   venue: string | null;
   round: string | null;
@@ -101,6 +104,7 @@ export default function CatalogPage() {
     override_title: "",
     override_description: "",
     override_image_url: "",
+    thumbnail_url: "",
     broadcaster: "",
     broadcaster_logo_url: "",
     manual_price: "",
@@ -108,8 +112,12 @@ export default function CatalogPage() {
   });
   const [isGeneratingDescription, setIsGeneratingDescription] = useState(false);
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
+  const [isGeneratingThumbnail, setIsGeneratingThumbnail] = useState(false);
   const [imagePrompt, setImagePrompt] = useState("");
+  const [thumbnailPrompt, setThumbnailPrompt] = useState("");
   const [showManualImageUrl, setShowManualImageUrl] = useState(false);
+  const [showManualThumbnailUrl, setShowManualThumbnailUrl] = useState(false);
+  const [teamLogos, setTeamLogos] = useState<{ home: string | null; away: string | null }>({ home: null, away: null });
 
   // Fetch all sports
   const { data: sports = [] } = useQuery({
@@ -266,19 +274,64 @@ Camera: low-angle shot, 85mm lens look, dramatic perspective.
 Final output: vertical poster, 1024x1536 or higher, suitable for mobile app thumbnail.`;
   };
 
+  // Generate default thumbnail prompt
+  const generateDefaultThumbnailPrompt = (event: CatalogEvent) => {
+    const homeTeam = event.home_team || 'Home Team';
+    const awayTeam = event.away_team || 'Away Team';
+    const league = event.league || 'Competition';
+    const eventDate = format(new Date(event.event_date), "EEEE d MMMM yyyy", { locale: fr });
+
+    return `Create a clean, modern matchday card image (16:9 landscape ratio) for a sports event.
+
+Layout:
+- Split background with two team identity colors (diagonal or vertical split)
+- Left side: visual representation of ${homeTeam} with their team emblem/crest style
+- Right side: visual representation of ${awayTeam} with their team emblem/crest style
+- Both sides feature large, prominent team emblems/crests
+- Bottom overlay: event badge with competition name
+
+Teams: ${homeTeam} vs ${awayTeam}
+Competition: ${league}
+Date: ${eventDate}
+
+Style: bold colors, clean geometric shapes, professional sports broadcast aesthetic, similar to NFL Sunday Ticket / YouTube TV matchday cards.
+No real logos, no watermarks. Use stylized crests inspired by each team's identity.
+IMPORTANT: Generate a HORIZONTAL/LANDSCAPE image with aspect ratio 16:9 (wider than tall).`;
+  };
+
+  // Fetch team logos when event is opened
+  const fetchTeamLogos = async (event: CatalogEvent) => {
+    const logos: { home: string | null; away: string | null } = { home: null, away: null };
+    if (event.home_team_id || event.away_team_id) {
+      const ids = [event.home_team_id, event.away_team_id].filter(Boolean) as string[];
+      const { data } = await supabase.from('teams').select('id, logo_url').in('id', ids);
+      if (data) {
+        for (const team of data) {
+          if (team.id === event.home_team_id) logos.home = team.logo_url;
+          if (team.id === event.away_team_id) logos.away = team.logo_url;
+        }
+      }
+    }
+    setTeamLogos(logos);
+  };
+
   const openConfigurator = (event: CatalogEvent) => {
     setSelectedEvent(event);
     setEditForm({
       override_title: event.override_title || "",
       override_description: event.override_description || "",
       override_image_url: event.override_image_url || "",
+      thumbnail_url: event.thumbnail_url || "",
       broadcaster: event.broadcaster || "",
       broadcaster_logo_url: event.broadcaster_logo_url || "",
       manual_price: "",
       manual_tier: "",
     });
     setImagePrompt(generateDefaultImagePrompt(event));
+    setThumbnailPrompt(generateDefaultThumbnailPrompt(event));
     setShowManualImageUrl(!!event.override_image_url);
+    setShowManualThumbnailUrl(!!event.thumbnail_url);
+    fetchTeamLogos(event);
   };
 
   const handleSaveAndPromote = async () => {
@@ -290,6 +343,7 @@ Final output: vertical poster, 1024x1536 or higher, suitable for mobile app thum
           override_title: editForm.override_title || null,
           override_description: editForm.override_description || null,
           override_image_url: editForm.override_image_url || null,
+          thumbnail_url: editForm.thumbnail_url || null,
           broadcaster: editForm.broadcaster || null,
           broadcaster_logo_url: editForm.broadcaster_logo_url || null,
           updated_at: new Date().toISOString(),
@@ -310,10 +364,43 @@ Final output: vertical poster, 1024x1536 or higher, suitable for mobile app thum
         override_title: editForm.override_title || null,
         override_description: editForm.override_description || null,
         override_image_url: editForm.override_image_url || null,
+        thumbnail_url: editForm.thumbnail_url || null,
         broadcaster: editForm.broadcaster || null,
         broadcaster_logo_url: editForm.broadcaster_logo_url || null,
       },
     });
+  };
+
+  const handleGenerateThumbnail = async () => {
+    if (!selectedEvent || !thumbnailPrompt.trim()) {
+      toast.error('Veuillez saisir un prompt pour la vignette');
+      return;
+    }
+    setIsGeneratingThumbnail(true);
+    try {
+      const session = await supabase.auth.getSession();
+      if (!session.data.session) { toast.error('Non authentifié'); return; }
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-ai-image`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.data.session.access_token}`,
+          },
+          body: JSON.stringify({ prompt: thumbnailPrompt, eventId: selectedEvent.id }),
+        }
+      );
+      const result = await response.json();
+      if (!response.ok || !result.success) throw new Error(result.error || 'Erreur lors de la génération');
+      setEditForm(prev => ({ ...prev, thumbnail_url: result.data.imageUrl }));
+      toast.success('Vignette générée avec succès');
+    } catch (error) {
+      console.error('Error generating thumbnail:', error);
+      toast.error(error instanceof Error ? error.message : 'Erreur lors de la génération');
+    } finally {
+      setIsGeneratingThumbnail(false);
+    }
   };
 
   const handleGenerateDescription = async () => {
@@ -403,6 +490,7 @@ Final output: vertical poster, 1024x1536 or higher, suitable for mobile app thum
   // Completion badges helper
   const hasDescription = !!editForm.override_description;
   const hasImage = !!editForm.override_image_url;
+  const hasThumbnail = !!editForm.thumbnail_url;
   const hasBroadcaster = !!editForm.broadcaster;
 
   return (
@@ -557,6 +645,11 @@ Final output: vertical poster, 1024x1536 or higher, suitable for mobile app thum
                                   <ImageIcon className="h-3 w-3 mr-1" />Image ✓
                                 </Badge>
                               )}
+                              {event.thumbnail_url && (
+                                <Badge variant="secondary" className="text-xs">
+                                  <ImageIcon className="h-3 w-3 mr-1" />Vignette ✓
+                                </Badge>
+                              )}
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
@@ -629,6 +722,21 @@ Final output: vertical poster, 1024x1536 or higher, suitable for mobile app thum
                     )}
                   </div>
 
+                  {/* Thumbnail preview */}
+                  {editForm.thumbnail_url && (
+                    <div className="w-full max-w-xs mx-auto">
+                      <p className="text-xs text-muted-foreground mb-1.5">Vignette Matchday</p>
+                      <div className="aspect-video w-full rounded-lg overflow-hidden bg-muted border">
+                        <img
+                          src={`${editForm.thumbnail_url}${editForm.thumbnail_url.includes('?') ? '&' : '?'}t=${Date.now()}`}
+                          alt="Matchday thumbnail"
+                          className="w-full h-full object-cover"
+                          key={editForm.thumbnail_url}
+                        />
+                      </div>
+                    </div>
+                  )}
+
                   {/* Event info */}
                   <div className="space-y-3">
                     <h3 className="text-lg font-semibold leading-tight">
@@ -668,6 +776,7 @@ Final output: vertical poster, 1024x1536 or higher, suitable for mobile app thum
                     <div className="flex flex-col gap-1.5 pt-2">
                       <CompletionBadge done={hasDescription} label="Description" />
                       <CompletionBadge done={hasImage} label="Image" />
+                      <CompletionBadge done={hasThumbnail} label="Vignette" />
                       <CompletionBadge done={hasBroadcaster} label="Diffuseur" />
                     </div>
                   </div>
@@ -741,90 +850,211 @@ Final output: vertical poster, 1024x1536 or higher, suitable for mobile app thum
                     </TabsContent>
 
                     {/* === TAB: IMAGE === */}
-                    <TabsContent value="image" className="mt-0 space-y-6">
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant={!showManualImageUrl ? "secondary" : "ghost"}
-                          size="sm" onClick={() => setShowManualImageUrl(false)}
-                          className="gap-1.5"
-                        >
-                          <Sparkles className="h-3.5 w-3.5" />IA
-                        </Button>
-                        <Button
-                          variant={showManualImageUrl ? "secondary" : "ghost"}
-                          size="sm" onClick={() => setShowManualImageUrl(true)}
-                          className="gap-1.5"
-                        >
-                          <Link2 className="h-3.5 w-3.5" />URL manuelle
-                        </Button>
-                      </div>
+                    <TabsContent value="image" className="mt-0 space-y-8">
+                      {/* --- Section 1: Poster principal --- */}
+                      <div className="space-y-4">
+                        <h3 className="text-sm font-semibold flex items-center gap-2">
+                          <ImageIcon className="h-4 w-4" />
+                          Image principale (Poster cinématique)
+                        </h3>
 
-                      {!showManualImageUrl ? (
-                        <div className="space-y-4">
-                          <div className="space-y-2">
-                            <Label htmlFor="cfg_prompt">Prompt pour l'IA (modifiable)</Label>
-                            <Textarea
-                              id="cfg_prompt"
-                              placeholder="Décrivez l'image souhaitée..."
-                              value={imagePrompt}
-                              onChange={(e) => setImagePrompt(e.target.value)}
-                              rows={12}
-                              className="text-xs font-mono"
-                            />
-                          </div>
+                        <div className="flex items-center gap-2">
                           <Button
-                            type="button" variant="outline"
-                            onClick={handleGenerateImage}
-                            disabled={isGeneratingImage || !imagePrompt.trim()}
-                            className="w-full gap-2"
+                            variant={!showManualImageUrl ? "secondary" : "ghost"}
+                            size="sm" onClick={() => setShowManualImageUrl(false)}
+                            className="gap-1.5"
                           >
-                            {isGeneratingImage ? (
-                              <><Loader2 className="h-4 w-4 animate-spin" />Génération en cours...</>
-                            ) : (
-                              <><Sparkles className="h-4 w-4" />Générer l'image</>
-                            )}
+                            <Sparkles className="h-3.5 w-3.5" />IA
+                          </Button>
+                          <Button
+                            variant={showManualImageUrl ? "secondary" : "ghost"}
+                            size="sm" onClick={() => setShowManualImageUrl(true)}
+                            className="gap-1.5"
+                          >
+                            <Link2 className="h-3.5 w-3.5" />URL manuelle
                           </Button>
                         </div>
-                      ) : (
-                        <div className="space-y-2">
-                          <Label htmlFor="cfg_image_url">URL de l'image</Label>
-                          <Input
-                            id="cfg_image_url"
-                            placeholder="https://..."
-                            value={editForm.override_image_url}
-                            onChange={(e) => setEditForm(prev => ({ ...prev, override_image_url: e.target.value }))}
-                          />
-                        </div>
-                      )}
 
-                      {/* Image preview inline */}
-                      {editForm.override_image_url && (
-                        <div className="space-y-2">
-                          <Label className="text-xs text-muted-foreground">Aperçu</Label>
-                          <div className="relative max-w-sm">
-                            <img
-                              src={`${editForm.override_image_url}${editForm.override_image_url.includes('?') ? '&' : '?'}t=${Date.now()}`}
-                              alt="Preview"
-                              className="w-full aspect-[2/3] object-cover rounded-lg border"
-                              key={editForm.override_image_url}
-                            />
-                            {!showManualImageUrl && (
-                              <Button
-                                type="button" variant="secondary" size="sm"
-                                onClick={handleGenerateImage}
-                                disabled={isGeneratingImage}
-                                className="absolute top-2 right-2 h-7 gap-1"
-                              >
-                                <RefreshCw className={`h-3 w-3 ${isGeneratingImage ? 'animate-spin' : ''}`} />
-                                Régénérer
-                              </Button>
-                            )}
+                        {!showManualImageUrl ? (
+                          <div className="space-y-4">
+                            <div className="space-y-2">
+                              <Label htmlFor="cfg_prompt">Prompt pour l'IA (modifiable)</Label>
+                              <Textarea
+                                id="cfg_prompt"
+                                placeholder="Décrivez l'image souhaitée..."
+                                value={imagePrompt}
+                                onChange={(e) => setImagePrompt(e.target.value)}
+                                rows={10}
+                                className="text-xs font-mono"
+                              />
+                            </div>
+                            <Button
+                              type="button" variant="outline"
+                              onClick={handleGenerateImage}
+                              disabled={isGeneratingImage || !imagePrompt.trim()}
+                              className="w-full gap-2"
+                            >
+                              {isGeneratingImage ? (
+                                <><Loader2 className="h-4 w-4 animate-spin" />Génération en cours...</>
+                              ) : (
+                                <><Sparkles className="h-4 w-4" />Générer le poster</>
+                              )}
+                            </Button>
                           </div>
-                          <p className="text-xs text-muted-foreground truncate max-w-sm">
-                            {editForm.override_image_url}
-                          </p>
+                        ) : (
+                          <div className="space-y-2">
+                            <Label htmlFor="cfg_image_url">URL de l'image</Label>
+                            <Input
+                              id="cfg_image_url"
+                              placeholder="https://..."
+                              value={editForm.override_image_url}
+                              onChange={(e) => setEditForm(prev => ({ ...prev, override_image_url: e.target.value }))}
+                            />
+                          </div>
+                        )}
+
+                        {editForm.override_image_url && (
+                          <div className="space-y-2">
+                            <Label className="text-xs text-muted-foreground">Aperçu poster (2:3)</Label>
+                            <div className="relative max-w-[200px]">
+                              <img
+                                src={`${editForm.override_image_url}${editForm.override_image_url.includes('?') ? '&' : '?'}t=${Date.now()}`}
+                                alt="Preview"
+                                className="w-full aspect-[2/3] object-cover rounded-lg border"
+                                key={editForm.override_image_url}
+                              />
+                              {!showManualImageUrl && (
+                                <Button
+                                  type="button" variant="secondary" size="sm"
+                                  onClick={handleGenerateImage}
+                                  disabled={isGeneratingImage}
+                                  className="absolute top-2 right-2 h-7 gap-1"
+                                >
+                                  <RefreshCw className={`h-3 w-3 ${isGeneratingImage ? 'animate-spin' : ''}`} />
+                                  Régénérer
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Separator */}
+                      <div className="border-t" />
+
+                      {/* --- Section 2: Vignette Matchday --- */}
+                      <div className="space-y-4">
+                        <h3 className="text-sm font-semibold flex items-center gap-2">
+                          <ImageIcon className="h-4 w-4" />
+                          Vignette Matchday
+                        </h3>
+                        <p className="text-xs text-muted-foreground">
+                          Image simplifiée avec les identités des deux équipes, au format paysage (16:9).
+                        </p>
+
+                        {/* Team logos preview */}
+                        {(selectedEvent?.home_team || selectedEvent?.away_team) && (
+                          <div className="flex items-center justify-center gap-6 p-4 rounded-lg bg-muted/50 border">
+                            <div className="flex flex-col items-center gap-2">
+                              {teamLogos.home ? (
+                                <img src={teamLogos.home} alt="" className="h-12 w-12 object-contain" />
+                              ) : (
+                                <div className="h-12 w-12 rounded-full bg-muted border flex items-center justify-center text-xs text-muted-foreground">Logo</div>
+                              )}
+                              <span className="text-xs font-medium truncate max-w-[100px]">{selectedEvent?.home_team || '?'}</span>
+                            </div>
+                            <span className="text-lg font-bold text-muted-foreground">VS</span>
+                            <div className="flex flex-col items-center gap-2">
+                              {teamLogos.away ? (
+                                <img src={teamLogos.away} alt="" className="h-12 w-12 object-contain" />
+                              ) : (
+                                <div className="h-12 w-12 rounded-full bg-muted border flex items-center justify-center text-xs text-muted-foreground">Logo</div>
+                              )}
+                              <span className="text-xs font-medium truncate max-w-[100px]">{selectedEvent?.away_team || '?'}</span>
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant={!showManualThumbnailUrl ? "secondary" : "ghost"}
+                            size="sm" onClick={() => setShowManualThumbnailUrl(false)}
+                            className="gap-1.5"
+                          >
+                            <Sparkles className="h-3.5 w-3.5" />IA
+                          </Button>
+                          <Button
+                            variant={showManualThumbnailUrl ? "secondary" : "ghost"}
+                            size="sm" onClick={() => setShowManualThumbnailUrl(true)}
+                            className="gap-1.5"
+                          >
+                            <Link2 className="h-3.5 w-3.5" />URL manuelle
+                          </Button>
                         </div>
-                      )}
+
+                        {!showManualThumbnailUrl ? (
+                          <div className="space-y-4">
+                            <div className="space-y-2">
+                              <Label htmlFor="cfg_thumbnail_prompt">Prompt pour la vignette (modifiable)</Label>
+                              <Textarea
+                                id="cfg_thumbnail_prompt"
+                                placeholder="Décrivez la vignette souhaitée..."
+                                value={thumbnailPrompt}
+                                onChange={(e) => setThumbnailPrompt(e.target.value)}
+                                rows={8}
+                                className="text-xs font-mono"
+                              />
+                            </div>
+                            <Button
+                              type="button" variant="outline"
+                              onClick={handleGenerateThumbnail}
+                              disabled={isGeneratingThumbnail || !thumbnailPrompt.trim()}
+                              className="w-full gap-2"
+                            >
+                              {isGeneratingThumbnail ? (
+                                <><Loader2 className="h-4 w-4 animate-spin" />Génération en cours...</>
+                              ) : (
+                                <><Sparkles className="h-4 w-4" />Générer la vignette</>
+                              )}
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            <Label htmlFor="cfg_thumbnail_url">URL de la vignette</Label>
+                            <Input
+                              id="cfg_thumbnail_url"
+                              placeholder="https://..."
+                              value={editForm.thumbnail_url}
+                              onChange={(e) => setEditForm(prev => ({ ...prev, thumbnail_url: e.target.value }))}
+                            />
+                          </div>
+                        )}
+
+                        {editForm.thumbnail_url && (
+                          <div className="space-y-2">
+                            <Label className="text-xs text-muted-foreground">Aperçu vignette (16:9)</Label>
+                            <div className="relative max-w-sm">
+                              <img
+                                src={`${editForm.thumbnail_url}${editForm.thumbnail_url.includes('?') ? '&' : '?'}t=${Date.now()}`}
+                                alt="Thumbnail preview"
+                                className="w-full aspect-video object-cover rounded-lg border"
+                                key={editForm.thumbnail_url}
+                              />
+                              {!showManualThumbnailUrl && (
+                                <Button
+                                  type="button" variant="secondary" size="sm"
+                                  onClick={handleGenerateThumbnail}
+                                  disabled={isGeneratingThumbnail}
+                                  className="absolute top-2 right-2 h-7 gap-1"
+                                >
+                                  <RefreshCw className={`h-3 w-3 ${isGeneratingThumbnail ? 'animate-spin' : ''}`} />
+                                  Régénérer
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </TabsContent>
 
                     {/* === TAB: DIFFUSION === */}
