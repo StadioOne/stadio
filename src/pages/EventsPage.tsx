@@ -72,7 +72,6 @@ export default function EventsPage() {
   // Filter events by time status (client-side)
   const filteredEvents = useMemo(() => {
     if (!data?.data || timeStatus === 'all') return data?.data || [];
-    
     return data.data.filter((event) => {
       if (!event.event_date) return false;
       const eventTimeStatus = getTimeStatus(event.event_date, event.is_live || false);
@@ -96,11 +95,8 @@ export default function EventsPage() {
   const handleToggleSelect = useCallback((id: string, selected: boolean) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      if (selected) {
-        next.add(id);
-      } else {
-        next.delete(id);
-      }
+      if (selected) next.add(id);
+      else next.delete(id);
       return next;
     });
   }, []);
@@ -127,9 +123,7 @@ export default function EventsPage() {
 
   const handleDeleteRequest = useCallback((id: string) => {
     const event = data?.data.find((e) => e.id === id);
-    if (event) {
-      setEventToDelete(event);
-    }
+    if (event) setEventToDelete(event);
   }, [data?.data]);
 
   const handleConfirmDelete = useCallback(() => {
@@ -137,9 +131,7 @@ export default function EventsPage() {
       deleteMutation.mutate(eventToDelete.id, {
         onSuccess: () => {
           setEventToDelete(null);
-          if (selectedEvent?.id === eventToDelete.id) {
-            setSelectedEvent(null);
-          }
+          if (selectedEvent?.id === eventToDelete.id) setSelectedEvent(null);
         },
       });
     }
@@ -162,43 +154,50 @@ export default function EventsPage() {
     setTimeStatus('all');
   }, []);
 
+  // Stats click handler → apply filter
+  const handleStatClick = useCallback((filter: { status?: string; isLive?: boolean; timeStatus?: string }) => {
+    if (filter.timeStatus) {
+      setTimeStatus(filter.timeStatus as TimeStatusFilter);
+    } else if (filter.isLive) {
+      setFilters((prev) => ({ ...prev, isLive: true, offset: 0 }));
+    } else if (filter.status) {
+      setFilters((prev) => ({ ...prev, status: filter.status as EventsFilters['status'], offset: 0 }));
+    } else {
+      // "Total" → clear all
+      handleClearFilters();
+    }
+  }, [handleClearFilters]);
+
   // Pagination
   const currentPage = Math.floor((filters.offset || 0) / ITEMS_PER_PAGE) + 1;
   const totalPages = Math.ceil((data?.total || 0) / ITEMS_PER_PAGE);
+  const rangeStart = (filters.offset || 0) + 1;
+  const rangeEnd = Math.min((filters.offset || 0) + ITEMS_PER_PAGE, data?.total || 0);
 
   const handlePageChange = (page: number) => {
-    setFilters((prev) => ({
-      ...prev,
-      offset: (page - 1) * ITEMS_PER_PAGE,
-    }));
+    setFilters((prev) => ({ ...prev, offset: (page - 1) * ITEMS_PER_PAGE }));
   };
 
   const hasActiveFilters = !!(
-    filters.status ||
-    filters.sport ||
-    filters.league ||
-    filters.isLive ||
-    filters.isPinned ||
-    filters.search ||
+    filters.status || filters.sport || filters.league ||
+    filters.isLive || filters.isPinned || filters.search ||
     timeStatus !== 'all'
   );
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-            <Calendar className="h-6 w-6 text-primary" />
-            {t('events.title')}
-          </h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            {t('events.subtitle')}
-          </p>
-        </div>
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+          <Calendar className="h-6 w-6 text-primary" />
+          {t('events.title')}
+        </h1>
+        <p className="text-muted-foreground text-sm mt-1">
+          {t('events.subtitle')}
+        </p>
       </div>
 
-      {/* Stats */}
+      {/* Stats KPI Cards */}
       <EventsStats
         total={stats?.total || 0}
         published={stats?.published || 0}
@@ -209,6 +208,7 @@ export default function EventsPage() {
         ongoing={stats?.ongoing || 0}
         finished={stats?.finished || 0}
         isLoading={statsLoading}
+        onClickStat={handleStatClick}
       />
 
       {/* Filters */}
@@ -227,7 +227,7 @@ export default function EventsPage() {
       {isLoading ? (
         <div className={viewMode === 'grid' ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4' : 'space-y-2'}>
           {Array.from({ length: 8 }).map((_, i) => (
-            <Skeleton key={i} className={viewMode === 'grid' ? 'h-64 rounded-lg' : 'h-16 rounded-lg'} />
+            <Skeleton key={i} className={viewMode === 'grid' ? 'h-72 rounded-lg' : 'h-16 rounded-lg'} />
           ))}
         </div>
       ) : error ? (
@@ -298,41 +298,47 @@ export default function EventsPage() {
         </div>
       )}
 
-      {/* Pagination */}
+      {/* Pagination with counter */}
       {data && data.total > ITEMS_PER_PAGE && (
-        <Pagination>
-          <PaginationContent>
-            <PaginationItem>
-              <PaginationPrevious
-                onClick={() => handlePageChange(Math.max(1, currentPage - 1))}
-                className={currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
-              />
-            </PaginationItem>
-            {Array.from({ length: Math.min(5, totalPages) }).map((_, i) => {
-              const page = i + 1;
-              return (
-                <PaginationItem key={page}>
-                  <PaginationLink
-                    onClick={() => handlePageChange(page)}
-                    isActive={page === currentPage}
-                    className="cursor-pointer"
-                  >
-                    {page}
-                  </PaginationLink>
-                </PaginationItem>
-              );
-            })}
-            <PaginationItem>
-              <PaginationNext
-                onClick={() => handlePageChange(Math.min(totalPages, currentPage + 1))}
-                className={currentPage === totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
-              />
-            </PaginationItem>
-          </PaginationContent>
-        </Pagination>
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">
+            Affichage <span className="font-medium text-foreground">{rangeStart}-{rangeEnd}</span> sur{' '}
+            <span className="font-medium text-foreground">{data.total}</span> résultats
+          </p>
+          <Pagination>
+            <PaginationContent>
+              <PaginationItem>
+                <PaginationPrevious
+                  onClick={() => handlePageChange(Math.max(1, currentPage - 1))}
+                  className={currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                />
+              </PaginationItem>
+              {Array.from({ length: Math.min(5, totalPages) }).map((_, i) => {
+                const page = i + 1;
+                return (
+                  <PaginationItem key={page}>
+                    <PaginationLink
+                      onClick={() => handlePageChange(page)}
+                      isActive={page === currentPage}
+                      className="cursor-pointer"
+                    >
+                      {page}
+                    </PaginationLink>
+                  </PaginationItem>
+                );
+              })}
+              <PaginationItem>
+                <PaginationNext
+                  onClick={() => handlePageChange(Math.min(totalPages, currentPage + 1))}
+                  className={currentPage === totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                />
+              </PaginationItem>
+            </PaginationContent>
+          </Pagination>
+        </div>
       )}
 
-      {/* Detail Panel */}
+      {/* Detail Panel - Full-screen Dialog */}
       <EventDetailPanel
         event={selectedEvent}
         open={!!selectedEvent}

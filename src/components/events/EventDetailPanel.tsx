@@ -2,20 +2,19 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import { Save, RefreshCw, Loader2, Archive, Trash2 } from 'lucide-react';
+import { Save, RefreshCw, Loader2, Archive, Trash2, X, MapPin, DollarSign, FileText, Pencil } from 'lucide-react';
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet';
+  Dialog,
+  DialogContent,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Select,
   SelectContent,
@@ -28,6 +27,7 @@ import { TierBadge } from '@/components/admin/TierBadge';
 import { LiveBadge } from './LiveBadge';
 import { TimeStatusBadge } from './TimeStatusBadge';
 import { CountryTagsInput } from './CountryTagsInput';
+import { cn } from '@/lib/utils';
 import type { EventWithPricing } from '@/hooks/useEvents';
 import type { EventUpdate, PricingTier, EventPricingUpdate } from '@/lib/api-types';
 
@@ -62,21 +62,15 @@ export function EventDetailPanel({
 }: EventDetailPanelProps) {
   const { t } = useTranslation();
   
-  // Editorial overrides
   const [overrideTitle, setOverrideTitle] = useState('');
   const [overrideDescription, setOverrideDescription] = useState('');
   const [overrideImageUrl, setOverrideImageUrl] = useState('');
-  
-  // Geo restrictions
   const [allowedCountries, setAllowedCountries] = useState<string[]>([]);
   const [blockedCountries, setBlockedCountries] = useState<string[]>([]);
-  
-  // Pricing
   const [manualPrice, setManualPrice] = useState('');
   const [manualTier, setManualTier] = useState<PricingTier | ''>('');
   const [isManualOverride, setIsManualOverride] = useState(false);
 
-  // Reset form when event changes
   useEffect(() => {
     if (open && event) {
       setOverrideTitle(event.override_title || '');
@@ -92,8 +86,6 @@ export function EventDetailPanel({
 
   const handleSave = async () => {
     if (!event) return;
-    
-    // Save event data
     await onSave?.(event.id, {
       override_title: overrideTitle || null,
       override_description: overrideDescription || null,
@@ -101,8 +93,6 @@ export function EventDetailPanel({
       allowed_countries: allowedCountries,
       blocked_countries: blockedCountries,
     });
-    
-    // Save pricing if manual override is enabled
     if (onUpdatePricing) {
       await onUpdatePricing(event.id, {
         manual_price: isManualOverride && manualPrice ? parseFloat(manualPrice) : null,
@@ -136,341 +126,411 @@ export function EventDetailPanel({
     ? (manualTier || event.pricing?.computed_tier)
     : event.pricing?.computed_tier;
 
+  const imageUrl = overrideImageUrl || event.override_image_url || event.api_image_url;
+
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
-        <SheetHeader className="space-y-1 pb-4">
-          <div className="flex items-center justify-between">
-            <SheetTitle className="text-lg font-semibold">
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-[95vw] w-full h-[92vh] p-0 gap-0 flex flex-col overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-3 border-b bg-muted/30 flex-shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <DialogTitle className="text-base font-semibold truncate">
               Détails de l'événement
-            </SheetTitle>
-            <div className="flex items-center gap-2">
+            </DialogTitle>
+            <div className="flex items-center gap-1.5">
               {event.is_live && <LiveBadge />}
               {event.event_date && (
-                <TimeStatusBadge
-                  eventDate={event.event_date}
-                  isLive={event.is_live || false}
-                />
+                <TimeStatusBadge eventDate={event.event_date} isLive={event.is_live || false} />
               )}
               <StatusBadge status={event.status} />
             </div>
           </div>
-          <p className="text-sm text-muted-foreground line-clamp-1">
-            {event.api_title || 'Sans titre'}
-          </p>
-        </SheetHeader>
+        </div>
 
-        <div className="space-y-6">
-          {/* API Data Section (Read-only) */}
-          <section>
-            <h3 className="text-sm font-semibold text-muted-foreground mb-3 flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-muted-foreground" />
-              Données API (lecture seule)
-            </h3>
-            <div className="bg-muted/50 rounded-lg p-4 space-y-3">
+        {/* Body: 2-column layout */}
+        <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
+          {/* Left Column: Preview */}
+          <div className="w-full lg:w-[38%] border-b lg:border-b-0 lg:border-r bg-muted/20 overflow-y-auto p-6 space-y-5">
+            {/* Image preview */}
+            <div className="rounded-lg overflow-hidden bg-muted aspect-video">
+              {imageUrl ? (
+                <img src={imageUrl} alt="Preview" className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center">
+                  <span className="text-3xl font-bold text-muted-foreground/20">
+                    {event.sport?.slice(0, 3).toUpperCase() || '?'}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Thumbnail preview */}
+            {event.thumbnail_url && (
               <div>
-                <Label className="text-xs text-muted-foreground">Titre API</Label>
-                <p className="text-sm">{event.api_title || '—'}</p>
-              </div>
-              <div>
-                <Label className="text-xs text-muted-foreground">Description API</Label>
-                <p className="text-sm line-clamp-3">{event.api_description || '—'}</p>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label className="text-xs text-muted-foreground">Sport</Label>
-                  <p className="text-sm">{event.sport || '—'}</p>
-                </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground">Ligue</Label>
-                  <p className="text-sm">{event.league || '—'}</p>
+                <Label className="text-xs text-muted-foreground mb-1 block">Vignette Matchday</Label>
+                <div className="rounded-lg overflow-hidden bg-muted aspect-video">
+                  <img src={event.thumbnail_url} alt="Thumbnail" className="w-full h-full object-cover" />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label className="text-xs text-muted-foreground">Équipe domicile</Label>
-                  <p className="text-sm">{event.home_team || '—'}</p>
-                </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground">Équipe extérieur</Label>
-                  <p className="text-sm">{event.away_team || '—'}</p>
-                </div>
+            )}
+
+            {/* Event metadata */}
+            <div className="space-y-3">
+              <h3 className="font-semibold text-base">
+                {event.override_title || event.api_title || 'Sans titre'}
+              </h3>
+              {(event.home_team || event.away_team) && (
+                <p className="text-sm text-muted-foreground">
+                  {event.home_team} vs {event.away_team}
+                </p>
+              )}
+              <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                {event.sport && <Badge variant="outline">{event.sport}</Badge>}
+                {event.league && <Badge variant="outline">{event.league}</Badge>}
               </div>
               {formattedDate && (
-                <div>
-                  <Label className="text-xs text-muted-foreground">Date</Label>
-                  <p className="text-sm">{formattedDate}</p>
-                </div>
+                <p className="text-sm text-muted-foreground">{formattedDate}</p>
               )}
-              {event.api_image_url && (
-                <div>
-                  <Label className="text-xs text-muted-foreground">Image API</Label>
-                  <img
-                    src={event.api_image_url}
-                    alt="API preview"
-                    className="w-full h-32 object-cover rounded mt-1"
-                  />
-                </div>
-              )}
-            </div>
-          </section>
-
-          <Separator />
-
-          {/* Editorial Overrides Section */}
-          <section>
-            <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-primary" />
-              Surcharges éditoriales
-            </h3>
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="override-title">Titre personnalisé</Label>
-                <Input
-                  id="override-title"
-                  value={overrideTitle}
-                  onChange={(e) => setOverrideTitle(e.target.value)}
-                  placeholder={event.api_title || 'Entrez un titre...'}
-                  className="mt-1"
-                />
-              </div>
-              <div>
-                <Label htmlFor="override-description">Description personnalisée</Label>
-                <Textarea
-                  id="override-description"
-                  value={overrideDescription}
-                  onChange={(e) => setOverrideDescription(e.target.value)}
-                  placeholder="Description personnalisée..."
-                  className="mt-1 min-h-[80px]"
-                />
-              </div>
-              <div>
-                <Label htmlFor="override-image">URL image personnalisée</Label>
-                <Input
-                  id="override-image"
-                  value={overrideImageUrl}
-                  onChange={(e) => setOverrideImageUrl(e.target.value)}
-                  placeholder="https://..."
-                  className="mt-1"
-                />
-                {overrideImageUrl && (
-                  <img
-                    src={overrideImageUrl}
-                    alt="Override preview"
-                    className="w-full h-32 object-cover rounded mt-2"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).style.display = 'none';
-                    }}
-                  />
-                )}
-              </div>
-            </div>
-          </section>
-
-          <Separator />
-
-          {/* Geo Restrictions Section */}
-          <section>
-            <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-info" />
-              Restrictions géographiques
-            </h3>
-            <div className="space-y-4">
-              <div>
-                <Label className="text-sm mb-2 block">Pays autorisés</Label>
-                <CountryTagsInput
-                  value={allowedCountries}
-                  onChange={setAllowedCountries}
-                  placeholder="FR, US, GB..."
-                  variant="allowed"
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  Laissez vide pour autoriser tous les pays
+              {event.venue && (
+                <p className="text-sm text-muted-foreground flex items-center gap-1">
+                  <MapPin className="h-3.5 w-3.5" />
+                  {event.venue}
                 </p>
-              </div>
-              <div>
-                <Label className="text-sm mb-2 block">Pays bloqués</Label>
-                <CountryTagsInput
-                  value={blockedCountries}
-                  onChange={setBlockedCountries}
-                  placeholder="RU, CN..."
-                  variant="blocked"
-                />
-              </div>
-            </div>
-          </section>
-
-          <Separator />
-
-          {/* Pricing Section */}
-          <section>
-            <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-tier-gold" />
-              Tarification
-            </h3>
-            <div className="bg-muted/50 rounded-lg p-4 space-y-4">
-              {/* Manual Override Toggle */}
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label className="text-sm">Surcharge manuelle</Label>
-                  <p className="text-xs text-muted-foreground">
-                    Définir un prix/tier manuellement
-                  </p>
-                </div>
-                <Switch
-                  checked={isManualOverride}
-                  onCheckedChange={setIsManualOverride}
-                />
-              </div>
-
-              {/* Manual Price & Tier Inputs */}
-              {isManualOverride && (
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label htmlFor="manual-price" className="text-xs">Prix manuel (€)</Label>
-                    <Input
-                      id="manual-price"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={manualPrice}
-                      onChange={(e) => setManualPrice(e.target.value)}
-                      placeholder="14.99"
-                      className="mt-1"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="manual-tier" className="text-xs">Tier manuel</Label>
-                    <Select
-                      value={manualTier}
-                      onValueChange={(value) => setManualTier(value as PricingTier)}
-                    >
-                      <SelectTrigger className="mt-1">
-                        <SelectValue placeholder="Sélectionner" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="bronze">Bronze</SelectItem>
-                        <SelectItem value="silver">Silver</SelectItem>
-                        <SelectItem value="gold">Gold</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
               )}
+            </div>
 
-              {/* Current Pricing Display */}
-              <div className="flex items-center justify-between pt-2 border-t border-border/50">
+            {/* Current pricing display */}
+            <div className="rounded-lg bg-muted/50 p-4 space-y-2">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Tarification actuelle</p>
+              <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   {displayTier && <TierBadge tier={displayTier} />}
                   {isManualOverride && (
-                    <Badge variant="outline" className="text-xs">
-                      Manuel
-                    </Badge>
+                    <Badge variant="outline" className="text-xs">Manuel</Badge>
                   )}
                 </div>
-                <span className="text-lg font-semibold">
+                <span className="text-xl font-bold tabular-nums">
                   {displayPrice ? `${Number(displayPrice).toFixed(2)} €` : '—'}
                 </span>
               </div>
+            </div>
+          </div>
 
-              {/* Computed values display */}
-              {event.pricing && (
-                <div className="grid grid-cols-2 gap-3 text-sm pt-2 border-t border-border/50">
+          {/* Right Column: Tabs */}
+          <div className="flex-1 overflow-hidden flex flex-col">
+            <Tabs defaultValue="info" className="flex-1 flex flex-col overflow-hidden">
+              <div className="px-6 pt-4 flex-shrink-0">
+                <TabsList className="w-full justify-start">
+                  <TabsTrigger value="info" className="gap-1.5">
+                    <FileText className="h-3.5 w-3.5" />
+                    Infos
+                  </TabsTrigger>
+                  <TabsTrigger value="editorial" className="gap-1.5">
+                    <Pencil className="h-3.5 w-3.5" />
+                    Éditorial
+                  </TabsTrigger>
+                  <TabsTrigger value="geo" className="gap-1.5">
+                    <MapPin className="h-3.5 w-3.5" />
+                    Géo
+                  </TabsTrigger>
+                  <TabsTrigger value="pricing" className="gap-1.5">
+                    <DollarSign className="h-3.5 w-3.5" />
+                    Prix
+                  </TabsTrigger>
+                </TabsList>
+              </div>
+
+              <div className="flex-1 overflow-y-auto px-6 py-4">
+                {/* Tab: Info (read-only) */}
+                <TabsContent value="info" className="mt-0 space-y-4">
+                  <div className="bg-muted/50 rounded-lg p-4 space-y-4">
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Titre API</Label>
+                      <p className="text-sm mt-0.5">{event.api_title || '—'}</p>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Description API</Label>
+                      <p className="text-sm mt-0.5 line-clamp-4">{event.api_description || '—'}</p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Sport</Label>
+                        <p className="text-sm mt-0.5">{event.sport || '—'}</p>
+                      </div>
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Ligue</Label>
+                        <p className="text-sm mt-0.5">{event.league || '—'}</p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Équipe domicile</Label>
+                        <p className="text-sm mt-0.5">{event.home_team || '—'}</p>
+                      </div>
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Équipe extérieur</Label>
+                        <p className="text-sm mt-0.5">{event.away_team || '—'}</p>
+                      </div>
+                    </div>
+                    {formattedDate && (
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Date</Label>
+                        <p className="text-sm mt-0.5">{formattedDate}</p>
+                      </div>
+                    )}
+                    {event.venue && (
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Lieu</Label>
+                        <p className="text-sm mt-0.5">{event.venue}</p>
+                      </div>
+                    )}
+                    {event.round && (
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Journée</Label>
+                        <p className="text-sm mt-0.5">{event.round}</p>
+                      </div>
+                    )}
+                    {event.api_image_url && (
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Image API</Label>
+                        <img
+                          src={event.api_image_url}
+                          alt="API preview"
+                          className="w-full h-40 object-cover rounded mt-1"
+                        />
+                      </div>
+                    )}
+                  </div>
+                </TabsContent>
+
+                {/* Tab: Editorial */}
+                <TabsContent value="editorial" className="mt-0 space-y-5">
                   <div>
-                    <Label className="text-xs text-muted-foreground">Prix calculé</Label>
-                    <p>
-                      {event.pricing.computed_price
-                        ? `${Number(event.pricing.computed_price).toFixed(2)} €`
-                        : '—'}
+                    <Label htmlFor="override-title">Titre personnalisé</Label>
+                    <Input
+                      id="override-title"
+                      value={overrideTitle}
+                      onChange={(e) => setOverrideTitle(e.target.value)}
+                      placeholder={event.api_title || 'Entrez un titre...'}
+                      className="mt-1.5"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="override-description">Description personnalisée</Label>
+                    <Textarea
+                      id="override-description"
+                      value={overrideDescription}
+                      onChange={(e) => setOverrideDescription(e.target.value)}
+                      placeholder="Description personnalisée..."
+                      className="mt-1.5 min-h-[120px]"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="override-image">URL image personnalisée</Label>
+                    <Input
+                      id="override-image"
+                      value={overrideImageUrl}
+                      onChange={(e) => setOverrideImageUrl(e.target.value)}
+                      placeholder="https://..."
+                      className="mt-1.5"
+                    />
+                    {overrideImageUrl && (
+                      <img
+                        src={overrideImageUrl}
+                        alt="Override preview"
+                        className="w-full h-40 object-cover rounded mt-2"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = 'none';
+                        }}
+                      />
+                    )}
+                  </div>
+                </TabsContent>
+
+                {/* Tab: Geo */}
+                <TabsContent value="geo" className="mt-0 space-y-5">
+                  <div>
+                    <Label className="text-sm mb-2 block">Pays autorisés</Label>
+                    <CountryTagsInput
+                      value={allowedCountries}
+                      onChange={setAllowedCountries}
+                      placeholder="FR, US, GB..."
+                      variant="allowed"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1.5">
+                      Laissez vide pour autoriser tous les pays
                     </p>
                   </div>
                   <div>
-                    <Label className="text-xs text-muted-foreground">Tier calculé</Label>
-                    <p>{event.pricing.computed_tier || '—'}</p>
+                    <Label className="text-sm mb-2 block">Pays bloqués</Label>
+                    <CountryTagsInput
+                      value={blockedCountries}
+                      onChange={setBlockedCountries}
+                      placeholder="RU, CN..."
+                      variant="blocked"
+                    />
                   </div>
-                </div>
-              )}
+                </TabsContent>
 
-              {/* Recompute Button */}
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full gap-2"
-                onClick={() => onRecomputePricing?.(event.id)}
-                disabled={isRecomputing}
-              >
-                {isRecomputing ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <RefreshCw className="h-3.5 w-3.5" />
-                )}
-                Recalculer le prix
-              </Button>
-            </div>
-          </section>
+                {/* Tab: Pricing */}
+                <TabsContent value="pricing" className="mt-0 space-y-5">
+                  <div className="bg-muted/50 rounded-lg p-4 space-y-4">
+                    {/* Manual Override Toggle */}
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <Label className="text-sm">Surcharge manuelle</Label>
+                        <p className="text-xs text-muted-foreground">
+                          Définir un prix/tier manuellement
+                        </p>
+                      </div>
+                      <Switch
+                        checked={isManualOverride}
+                        onCheckedChange={setIsManualOverride}
+                      />
+                    </div>
+
+                    {isManualOverride && (
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label htmlFor="manual-price" className="text-xs">Prix manuel (€)</Label>
+                          <Input
+                            id="manual-price"
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={manualPrice}
+                            onChange={(e) => setManualPrice(e.target.value)}
+                            placeholder="14.99"
+                            className="mt-1"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="manual-tier" className="text-xs">Tier manuel</Label>
+                          <Select
+                            value={manualTier}
+                            onValueChange={(value) => setManualTier(value as PricingTier)}
+                          >
+                            <SelectTrigger className="mt-1">
+                              <SelectValue placeholder="Sélectionner" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="bronze">Bronze</SelectItem>
+                              <SelectItem value="silver">Silver</SelectItem>
+                              <SelectItem value="gold">Gold</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Current Pricing Display */}
+                    <div className="flex items-center justify-between pt-3 border-t border-border/50">
+                      <div className="flex items-center gap-2">
+                        {displayTier && <TierBadge tier={displayTier} />}
+                        {isManualOverride && (
+                          <Badge variant="outline" className="text-xs">Manuel</Badge>
+                        )}
+                      </div>
+                      <span className="text-lg font-semibold tabular-nums">
+                        {displayPrice ? `${Number(displayPrice).toFixed(2)} €` : '—'}
+                      </span>
+                    </div>
+
+                    {/* Computed values */}
+                    {event.pricing && (
+                      <div className="grid grid-cols-2 gap-4 text-sm pt-3 border-t border-border/50">
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Prix calculé</Label>
+                          <p className="mt-0.5">
+                            {event.pricing.computed_price
+                              ? `${Number(event.pricing.computed_price).toFixed(2)} €`
+                              : '—'}
+                          </p>
+                        </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Tier calculé</Label>
+                          <p className="mt-0.5">{event.pricing.computed_tier || '—'}</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Recompute */}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full gap-2"
+                      onClick={() => onRecomputePricing?.(event.id)}
+                      disabled={isRecomputing}
+                    >
+                      {isRecomputing ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <RefreshCw className="h-3.5 w-3.5" />
+                      )}
+                      Recalculer le prix
+                    </Button>
+                  </div>
+                </TabsContent>
+              </div>
+            </Tabs>
+          </div>
         </div>
 
         {/* Footer Actions */}
-        <div className="sticky bottom-0 pt-4 pb-2 mt-6 bg-background border-t space-y-2">
-          <div className="flex items-center gap-2">
-            {event.status === 'draft' && onPublish && (
-              <Button
-                variant="default"
-                onClick={() => onPublish(event.id)}
-                className="flex-1"
-              >
-                Publier
-              </Button>
-            )}
-            {event.status === 'published' && onUnpublish && (
-              <Button
-                variant="outline"
-                onClick={() => onUnpublish(event.id)}
-                className="flex-1"
-              >
-                Dépublier
-              </Button>
-            )}
-            <Button
-              variant={hasChanges ? 'default' : 'secondary'}
-              onClick={handleSave}
-              disabled={!hasChanges || isSaving}
-              className="flex-1 gap-2"
-            >
-              {isSaving ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Save className="h-4 w-4" />
-              )}
-              {isSaving ? 'Enregistrement...' : 'Enregistrer'}
-            </Button>
-          </div>
-
-          {/* Archive and Delete Actions */}
+        <div className="flex items-center justify-between px-6 py-3 border-t bg-muted/30 flex-shrink-0">
           <div className="flex items-center gap-2">
             {event.status !== 'archived' && onArchive && (
               <Button
                 variant="outline"
+                size="sm"
                 onClick={() => onArchive(event.id)}
-                className="flex-1 gap-2"
+                className="gap-1.5"
               >
-                <Archive className="h-4 w-4" />
+                <Archive className="h-3.5 w-3.5" />
                 Archiver
               </Button>
             )}
             {onDelete && (
               <Button
                 variant="outline"
+                size="sm"
                 onClick={() => onDelete(event.id)}
-                className="flex-1 gap-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+                className="gap-1.5 text-destructive hover:text-destructive hover:bg-destructive/10"
               >
-                <Trash2 className="h-4 w-4" />
+                <Trash2 className="h-3.5 w-3.5" />
                 Supprimer
               </Button>
             )}
           </div>
+
+          <div className="flex items-center gap-2">
+            {event.status === 'draft' && onPublish && (
+              <Button size="sm" onClick={() => onPublish(event.id)}>
+                Publier
+              </Button>
+            )}
+            {event.status === 'published' && onUnpublish && (
+              <Button variant="outline" size="sm" onClick={() => onUnpublish(event.id)}>
+                Dépublier
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant={hasChanges ? 'default' : 'secondary'}
+              onClick={handleSave}
+              disabled={!hasChanges || isSaving}
+              className="gap-1.5"
+            >
+              {isSaving ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Save className="h-3.5 w-3.5" />
+              )}
+              {isSaving ? 'Enregistrement...' : 'Enregistrer'}
+            </Button>
+          </div>
         </div>
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   );
 }
