@@ -1,248 +1,247 @@
 
-# Plan : Amélioration de la gestion des événements
+# Plan : Refonte complète du Tableau de Bord Stadio Admin
 
-## Objectif
+## Constat actuel
 
-Ajouter deux nouvelles fonctionnalités à la page Événements :
+La page dashboard est actuellement un squelette statique avec des valeurs en dur ("--", "0") et deux cartes vides "Top événements" / "Top Originals". Elle ne consomme pas l'Edge Function `admin-dashboard` qui existe deja et retourne des KPIs reels. C'est la page d'accueil de l'admin : elle doit donner une vue d'ensemble instantanee et actionnable.
 
-1. **Statut temporel dynamique** : "À venir", "En cours", "Terminé" basé sur `event_date`
-2. **Actions Archiver et Supprimer** : accessibles depuis les menus d'actions de chaque événement
-
-## Architecture actuelle vs future
+## Nouvelle architecture de la page
 
 ```text
-ACTUEL:
-┌─────────────────────────────────────┐
-│ Statut éditorial uniquement:        │
-│ [Brouillon] [Publié] [Archivé]      │
-│                                     │
-│ Actions disponibles:                │
-│ - Publier / Dépublier               │
-│ - Démarrer/Arrêter le direct        │
-│ - Épingler / Désépingler            │
-└─────────────────────────────────────┘
-
-FUTUR:
-┌─────────────────────────────────────────────────────────────┐
-│ Double affichage des statuts:                               │
-│                                                             │
-│ Statut éditorial: [Brouillon] [Publié] [Archivé]           │
-│ Statut temporel:  [À venir]   [En cours] [Terminé]         │
-│                                                             │
-│ Nouvelles actions:                                          │
-│ - Archiver (passage en status = 'archived')                │
-│ - Supprimer (soft delete ou suppression définitive)        │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────┐
+│  Bonjour, {prénom} !                    Période: [Aujourd'hui ▼]        │
+│  Voici l'état de votre plateforme                                        │
+├──────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  ┌────────────┐  ┌────────────┐  ┌────────────┐  ┌────────────┐        │
+│  │  117       │  │  7         │  │  0         │  │  1         │        │
+│  │  Événements│  │  Publiés   │  │  En direct │  │  Originals │        │
+│  │  📅        │  │  ✅        │  │  🔴        │  │  📄        │        │
+│  └────────────┘  └────────────┘  └────────────┘  └────────────┘        │
+│                                                                          │
+│  ┌────────────┐  ┌────────────┐  ┌────────────┐  ┌────────────┐        │
+│  │  1         │  │  2         │  │  XX à venir│  │  X workflows│       │
+│  │  Auteurs   │  │  Catégories│  │  Prochains │  │  (24h)     │        │
+│  │  ✍️        │  │  📁        │  │  ⏰        │  │  ⚡        │        │
+│  └────────────┘  └────────────┘  └────────────┘  └────────────┘        │
+│                                                                          │
+├──────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  ┌─── Prochains événements ────────────┐  ┌─── Activité récente ──────┐ │
+│  │                                      │  │                           │ │
+│  │  🟢 PSG vs Marseille                │  │  ● Admin a publié ...     │ │
+│  │     Ligue 1 · 08/02 21:00           │  │    il y a 2h              │ │
+│  │  🔵 Arsenal vs Liverpool            │  │  ● Editor a modifié ...   │ │
+│  │     Premier League · 09/02 17:30    │  │    il y a 5h              │ │
+│  │  🔵 Real vs Barcelona              │  │  ● Admin a archivé ...    │ │
+│  │     La Liga · 10/02 21:00           │  │    il y a 1j              │ │
+│  │                                      │  │                           │ │
+│  │  [Voir tous les événements →]       │  │  [Voir le journal →]      │ │
+│  └──────────────────────────────────────┘  └───────────────────────────┘ │
+│                                                                          │
+├──────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  ┌─── Raccourcis rapides ────────────────────────────────────────────┐  │
+│  │  [+ Nouvel événement]  [Recalculer prix]  [Sync API Sports]      │  │
+│  │  [Rebuild listes]      [Voir Analytics]                           │  │
+│  └──────────────────────────────────────────────────────────────────┘  │
+│                                                                          │
+└──────────────────────────────────────────────────────────────────────────┘
 ```
 
-## Logique du statut temporel
-
-Le statut temporel sera calculé dynamiquement côté client :
-
-| Statut | Condition |
-|--------|-----------|
-| **À venir** | `event_date > now()` |
-| **En cours** | `event_date <= now() AND event_date + durée > now()` (ou `is_live = true`) |
-| **Terminé** | `event_date + durée < now()` |
-
-Pour simplifier (pas de durée stockée), on utilisera :
-- **À venir** : Date de l'événement dans le futur
-- **En cours** : `is_live = true` OU événement dans les dernières 3h
-- **Terminé** : Date passée de plus de 3h et `is_live = false`
-
-## Fichiers à créer
+## Fichiers a creer
 
 | Fichier | Description |
 |---------|-------------|
-| `src/components/events/TimeStatusBadge.tsx` | Badge pour afficher À venir / En cours / Terminé |
-| `src/components/events/DeleteEventDialog.tsx` | Modal de confirmation de suppression |
+| `src/hooks/useDashboard.ts` | Hook dedie qui appelle `admin-dashboard` + requetes directes pour upcoming events et audit recents |
+| `src/components/dashboard/DashboardKPIGrid.tsx` | Grille de 8 KPIs dynamiques avec icones et couleurs |
+| `src/components/dashboard/UpcomingEventsCard.tsx` | Liste des 5 prochains evenements avec TimeStatusBadge |
+| `src/components/dashboard/RecentActivityCard.tsx` | 5 dernieres entrees du journal d'audit |
+| `src/components/dashboard/QuickActionsCard.tsx` | Boutons de raccourcis vers les actions frequentes |
 
-## Fichiers à modifier
+## Fichiers a modifier
 
-| Fichier | Modifications |
-|---------|---------------|
-| `src/hooks/useEvents.ts` | Ajouter filtre `timeStatus` (upcoming/ongoing/finished) |
-| `src/hooks/useEventMutations.ts` | Ajouter `useArchiveEvent()` et `useDeleteEvent()` |
-| `src/components/events/EventFilters.tsx` | Ajouter pills pour filtrer par statut temporel |
-| `src/components/events/EventCard.tsx` | Afficher TimeStatusBadge + actions Archiver/Supprimer |
-| `src/components/events/EventRow.tsx` | Afficher TimeStatusBadge + actions Archiver/Supprimer |
-| `src/components/events/EventDetailPanel.tsx` | Ajouter boutons Archiver/Supprimer en footer |
-| `src/components/events/EventsStats.tsx` | Ajouter stats pour À venir / En cours / Terminé |
-| `src/pages/EventsPage.tsx` | Intégrer nouveaux handlers et état pour la modal de suppression |
+| Fichier | Modification |
+|---------|--------------|
+| `src/pages/DashboardPage.tsx` | Refonte complete avec les nouveaux composants |
+| `src/lib/i18n.ts` | Ajout des cles de traduction dashboard manquantes |
 
-## Détails techniques
+## Details techniques
 
-### 1. Composant `TimeStatusBadge.tsx`
+### 1. Hook `useDashboard.ts`
 
 ```typescript
-type TimeStatus = 'upcoming' | 'ongoing' | 'finished';
-
-function getTimeStatus(eventDate: string, isLive: boolean): TimeStatus {
-  const now = new Date();
-  const date = new Date(eventDate);
-  const threeHoursAgo = new Date(now.getTime() - 3 * 60 * 60 * 1000);
-
-  if (isLive) return 'ongoing';
-  if (date > now) return 'upcoming';
-  if (date > threeHoursAgo) return 'ongoing';
-  return 'finished';
+// Appel de l'Edge Function existante pour les KPIs
+export function useDashboardKPIs() {
+  return useQuery({
+    queryKey: ['dashboard', 'kpis'],
+    queryFn: () => adminApi.dashboard.getKPIs(),
+    staleTime: 5 * 60 * 1000,
+  });
 }
 
-// Badges avec couleurs:
-// À venir: bleu (bg-blue-500/10 text-blue-600)
-// En cours: vert pulsant (bg-green-500/10 text-green-600 animate-pulse)
-// Terminé: gris (bg-muted text-muted-foreground)
-```
-
-### 2. Hook `useArchiveEvent`
-
-```typescript
-export function useArchiveEvent() {
-  return useMutation({
-    mutationFn: async (eventId: string) => {
+// 5 prochains evenements (requete directe Supabase)
+export function useUpcomingEvents(limit = 5) {
+  return useQuery({
+    queryKey: ['dashboard', 'upcoming'],
+    queryFn: async () => {
       const { data, error } = await supabase
         .from('events')
-        .update({ status: 'archived', updated_at: new Date().toISOString() })
-        .eq('id', eventId)
-        .select()
-        .single();
+        .select('id, api_title, override_title, sport, league, event_date, is_live, status')
+        .gte('event_date', new Date().toISOString())
+        .in('status', ['draft', 'published'])
+        .order('event_date', { ascending: true })
+        .limit(limit);
       if (error) throw error;
       return data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: eventQueryKeys.all });
-      toast.success('Événement archivé');
-    }
+    staleTime: 60 * 1000,
   });
 }
-```
 
-### 3. Hook `useDeleteEvent`
-
-```typescript
-export function useDeleteEvent() {
-  return useMutation({
-    mutationFn: async (eventId: string) => {
-      // Suppression en cascade : pricing d'abord, puis événement
-      await supabase.from('event_pricing').delete().eq('event_id', eventId);
-      const { error } = await supabase.from('events').delete().eq('id', eventId);
+// 5 dernieres actions d'audit
+export function useRecentActivity(limit = 5) {
+  return useQuery({
+    queryKey: ['dashboard', 'activity'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('audit_log')
+        .select('id, actor_email, actor_role, action, entity, entity_id, created_at')
+        .order('created_at', { ascending: false })
+        .limit(limit);
       if (error) throw error;
+      return data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: eventQueryKeys.all });
-      toast.success('Événement supprimé');
-    }
+    staleTime: 30 * 1000,
   });
 }
 ```
 
-### 4. Mise à jour des filtres
+### 2. Composant `DashboardKPIGrid.tsx`
 
-Ajout d'un nouveau groupe de pills dans `EventFilters.tsx` :
+Deux lignes de 4 cartes :
+
+**Ligne 1 - Contenu principal** :
+- Total evenements (icone Calendar, couleur foreground)
+- Evenements publies (icone Eye, couleur success)
+- En direct (icone Radio, couleur destructive, pulse si > 0)
+- Originals publies (icone FileText, couleur primary)
+
+**Ligne 2 - Ressources** :
+- Auteurs actifs (icone PenTool)
+- Categories visibles (icone FolderOpen)
+- A venir prochaines 24h (icone CalendarClock, couleur blue) -- calcule depuis upcoming events
+- Workflows recents 24h (icone Zap, couleur warning)
+
+Chaque carte utilise le pattern existant avec `Card`, `Skeleton` en loading, et le style `card-hover`.
+
+### 3. Composant `UpcomingEventsCard.tsx`
+
+- Liste des 5 prochains evenements
+- Chaque ligne : titre (override ou api), sport/ligue en badge, date relative (`date-fns formatDistanceToNow`)
+- Reutilise `TimeStatusBadge` et `StatusBadge`
+- Lien "Voir tous les evenements" vers `/events`
+
+### 4. Composant `RecentActivityCard.tsx`
+
+- Liste des 5 dernieres entrees d'audit
+- Chaque ligne : action (badge colore), entite, acteur (email tronque), date relative
+- Reutilise `ActionBadge` et `RoleBadge` existants
+- Lien "Voir le journal" vers `/audit`
+
+### 5. Composant `QuickActionsCard.tsx`
+
+Boutons de raccourcis avec icones :
+- "Gerer les evenements" -> `/events`
+- "Recalculer les prix" -> appel mutation batch recompute
+- "Voir les analytics" -> `/analytics`
+- "Gerer le catalogue" -> `/catalog`
+
+Visibilite conditionnelle selon le role (ex: recalcul prix reserve admin+).
+
+### 6. Page `DashboardPage.tsx` refaite
 
 ```typescript
-const TIME_STATUS_OPTIONS = [
-  { value: 'all', label: 'Tous', icon: Clock },
-  { value: 'upcoming', label: 'À venir', icon: CalendarClock },
-  { value: 'ongoing', label: 'En cours', icon: Play },
-  { value: 'finished', label: 'Terminés', icon: CheckCircle2 },
-];
+export default function DashboardPage() {
+  const { t } = useTranslation();
+  const { user } = useAuth();
+
+  const firstName = user?.user_metadata?.full_name?.split(' ')[0] 
+    || user?.email?.split('@')[0] || '';
+
+  return (
+    <div className="space-y-6">
+      {/* Header avec salutation personnalisee */}
+      <div>
+        <h1 className="text-2xl font-semibold">
+          {t('dashboard.greeting', { name: firstName })}
+        </h1>
+        <p className="text-muted-foreground">{t('dashboard.subtitle')}</p>
+      </div>
+
+      {/* KPIs Grid - 2 lignes de 4 */}
+      <DashboardKPIGrid />
+
+      {/* Contenu principal : 2 colonnes */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        <UpcomingEventsCard />
+        <RecentActivityCard />
+      </div>
+
+      {/* Raccourcis rapides */}
+      <QuickActionsCard />
+    </div>
+  );
+}
 ```
 
-### 5. Mise à jour du menu d'actions
-
-Dans `EventCard.tsx` et `EventRow.tsx` :
+### 7. Traductions a ajouter
 
 ```typescript
-<DropdownMenuSeparator />
-
-<DropdownMenuItem onClick={() => onArchive?.(event.id)}>
-  <Archive className="h-4 w-4 mr-2" />
-  Archiver
-</DropdownMenuItem>
-
-<DropdownMenuItem 
-  onClick={() => onDelete?.(event.id)}
-  className="text-destructive focus:text-destructive"
->
-  <Trash2 className="h-4 w-4 mr-2" />
-  Supprimer
-</DropdownMenuItem>
+dashboard: {
+  title: "Tableau de bord",
+  greeting: "Bonjour, {{name}} !",
+  subtitle: "Voici l'état de votre plateforme",
+  kpis: {
+    totalEvents: "Événements",
+    publishedEvents: "Publiés",
+    liveEvents: "En direct",
+    publishedOriginals: "Originals publiés",
+    activeAuthors: "Auteurs actifs",
+    visibleCategories: "Catégories",
+    upcomingNext24h: "À venir (24h)",
+    recentWorkflows: "Workflows (24h)",
+  },
+  sections: {
+    upcomingEvents: "Prochains événements",
+    recentActivity: "Activité récente",
+    quickActions: "Raccourcis rapides",
+    viewAllEvents: "Voir tous les événements",
+    viewAuditLog: "Voir le journal",
+    noUpcoming: "Aucun événement à venir",
+    noActivity: "Aucune activité récente",
+  },
+  actions: {
+    manageEvents: "Gérer les événements",
+    recalculatePrices: "Recalculer les prix",
+    viewAnalytics: "Voir les analytics",
+    manageCatalog: "Gérer le catalogue",
+  },
+}
 ```
 
-### 6. Modal de confirmation
+## Securite et RBAC
 
-```typescript
-<AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-  <AlertDialogContent>
-    <AlertDialogHeader>
-      <AlertDialogTitle>Supprimer l'événement ?</AlertDialogTitle>
-      <AlertDialogDescription>
-        Cette action est irréversible. L'événement "{eventToDelete?.title}" 
-        et toutes ses données associées seront définitivement supprimés.
-      </AlertDialogDescription>
-    </AlertDialogHeader>
-    <AlertDialogFooter>
-      <AlertDialogCancel>Annuler</AlertDialogCancel>
-      <AlertDialogAction 
-        onClick={confirmDelete}
-        className="bg-destructive text-destructive-foreground"
-      >
-        Supprimer
-      </AlertDialogAction>
-    </AlertDialogFooter>
-  </AlertDialogContent>
-</AlertDialog>
-```
+- Les KPIs financiers (CA) ne sont PAS affiches sur le dashboard (reserves a la page Analytics avec controle `canSeeRevenue`)
+- Le bouton "Recalculer les prix" n'est visible que pour admin+
+- Toutes les donnees proviennent de l'Edge Function authentifiee ou de requetes Supabase protegees par RLS
 
-## Mise à jour des statistiques
+## Ameliorations UX cles
 
-`EventsStats.tsx` affichera deux lignes :
-
-```text
-Ligne 1 (Éditorial): Total | Publiés | Brouillons | Archivés
-Ligne 2 (Temporel):  À venir | En cours | Terminés
-```
-
-## Interface utilisateur finale
-
-```text
-┌──────────────────────────────────────────────────────────────────────┐
-│  Événements                                                          │
-├──────────────────────────────────────────────────────────────────────┤
-│  Stats: [120 Total] [45 Publiés] [8 Live] [67 Brouillons]           │
-│         [52 À venir] [3 En cours] [65 Terminés]                     │
-├──────────────────────────────────────────────────────────────────────┤
-│  Filtres:                                                            │
-│  Statut: [Tous] [Brouillon] [Publié] [Archivé]                      │
-│  Temps:  [Tous] [À venir] [En cours] [Terminés]                     │
-│  + Sport, Ligue, Live, Épinglés                                     │
-├──────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                  │
-│  │  [Football] │  │  [Football] │  │  [Tennis]   │                  │
-│  │  [À venir]  │  │  [En cours] │  │  [Terminé]  │                  │
-│  │  [Publié]   │  │  [Publié]   │  │  [Brouillon]│                  │
-│  │  PSG vs OM  │  │  Lyon vs... │  │  Nadal vs...│                  │
-│  │  [...menu]  │  │  [...menu]  │  │  [...menu]  │                  │
-│  │  - Dépublier│  │  - Dépublier│  │  - Publier  │                  │
-│  │  - Archiver │  │  - Archiver │  │  - Archiver │                  │
-│  │  - Supprimer│  │  - Supprimer│  │  - Supprimer│                  │
-│  └─────────────┘  └─────────────┘  └─────────────┘                  │
-│                                                                      │
-└──────────────────────────────────────────────────────────────────────┘
-```
-
-## Sécurité
-
-- La suppression nécessite une confirmation explicite via AlertDialog
-- Seuls les événements non-publiés ou archivés peuvent être supprimés (optionnel selon besoin)
-- L'archivage est réversible (un événement archivé peut être remis en brouillon)
-
-## Tests à effectuer
-
-1. Vérifier l'affichage du badge temporel sur les cartes et lignes
-2. Tester le filtre par statut temporel
-3. Archiver un événement et vérifier le changement de statut
-4. Supprimer un événement et confirmer la suppression
-5. Vérifier que les stats se mettent à jour correctement
+1. **Salutation personnalisee** : "Bonjour, {prenom}" au lieu d'un titre generique
+2. **Donnees reelles** : plus aucune valeur en dur, tout vient du backend
+3. **Contexte temporel** : prochains evenements avec dates relatives
+4. **Activite recente** : visibilite sur les dernieres actions de l'equipe
+5. **Raccourcis** : acces rapide aux actions frequentes sans naviguer dans le menu
+6. **Loading states** : squelettes de chargement sur chaque section
+7. **Responsive** : grille adaptative 1/2/4 colonnes selon la taille d'ecran
