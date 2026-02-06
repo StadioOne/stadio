@@ -1,150 +1,91 @@
 
-# Plan : Refonte du configurateur Catalogue en pleine page
 
-## Constat
+# Plan : Ajout d'une vignette Matchday Card dans le configurateur Catalogue
 
-Le configurateur d'evenement s'ouvre dans un `Sheet` (panneau lateral de 500px). C'est trop etroit pour le contenu riche (prompt IA, preview image, tarification, diffuseur). L'utilisateur doit scroller beaucoup et le formulaire est lineaire.
+## Objectif
 
-## Solution
+Ajouter un second type d'image dans l'onglet "Image" du configurateur : une **vignette Matchday** au style similaire a l'image de reference (NFL Sunday Ticket). Cette image sera generee par l'IA avec un design minimaliste montrant les logos/couleurs des deux equipes face-a-face, dans un format paysage (16:9), utilisable comme vignette dans l'application utilisateur.
 
-Remplacer le `Sheet` par une page/vue plein ecran en overlay (Dialog fullscreen) avec un layout en deux colonnes :
-- **Colonne gauche** : Preview visuelle de l'evenement (image, infos cles)
-- **Colonne droite** : Formulaire d'edition organise en sections avec Tabs
+## Schema de donnees
 
-## Nouvelle architecture visuelle
+### Migration : ajout colonne `thumbnail_url`
+
+Ajout d'une colonne `thumbnail_url` dans la table `events` pour stocker cette seconde image independamment du poster principal (`override_image_url`).
+
+```sql
+ALTER TABLE public.events ADD COLUMN thumbnail_url TEXT;
+```
+
+## Modifications
+
+### Fichier : `src/pages/CatalogPage.tsx`
+
+**1. Interface CatalogEvent** : ajout de `thumbnail_url: string | null`
+
+**2. Requete des logos equipes** : Lorsqu'un evenement est ouvert, recuperation des logos depuis la table `teams` via `home_team_id` et `away_team_id` pour les afficher comme reference visuelle dans la section vignette.
+
+**3. Etat du formulaire** : ajout de `thumbnail_url` dans `editForm`, plus un etat `isGeneratingThumbnail` et un `thumbnailPrompt`.
+
+**4. Onglet Image reorganise** : Deux sous-sections separees par un separateur :
 
 ```text
-┌──────────────────────────────────────────────────────────────────────────────┐
-│  ← Retour au catalogue          Configurer l'événement          [Supprimer] │
-├──────────────────────────────────────────────────────────────────────────────┤
-│                                                                              │
-│  ┌─── PREVIEW (40%) ─────────────┐  ┌─── EDITION (60%) ──────────────────┐ │
-│  │                                │  │                                     │ │
-│  │  ┌─────────────────────────┐  │  │  [Contenu] [Image] [Diffusion] [Prix]│
-│  │  │                         │  │  │                                     │ │
-│  │  │    Image poster 2:3     │  │  │  ── Onglet Contenu ──              │ │
-│  │  │    (ou placeholder)     │  │  │                                     │ │
-│  │  │                         │  │  │  Titre personnalise:               │ │
-│  │  │                         │  │  │  [________________________]        │ │
-│  │  └─────────────────────────┘  │  │                                     │ │
-│  │                                │  │  Description:         [Generer IA] │ │
-│  │  Celta Vigo vs Osasuna       │  │  [________________________]        │ │
-│  │  Football · La Liga           │  │  [________________________]        │ │
-│  │  06/02/2026 21:00             │  │                                     │ │
-│  │  Estadio Abanca-Balaidos     │  │  ── Onglet Image ──                │ │
-│  │                                │  │  [IA] [URL]                        │ │
-│  │  Status: En attente           │  │  Prompt: [___________________]     │ │
-│  │                                │  │  [Generer]                         │ │
-│  │                                │  │                                     │ │
-│  └────────────────────────────────┘  │  ── Onglet Diffusion ──           │ │
-│                                       │  Diffuseur: [Selector]            │ │
-│                                       │                                     │ │
-│                                       │  ── Onglet Prix ──                │ │
-│                                       │  Prix: [___] Tier: [___]          │ │
-│                                       │  "Vide = calcul auto"             │ │
-│                                       └─────────────────────────────────────┘ │
-│                                                                              │
-├──────────────────────────────────────────────────────────────────────────────┤
-│                              [Enregistrer]  [Envoyer vers Evenements →]     │
-└──────────────────────────────────────────────────────────────────────────────┘
+┌─── Onglet Image ────────────────────────────────────────────┐
+│                                                              │
+│  ── Image principale (Poster cinématique) ──                │
+│  [IA] [URL]                                                 │
+│  Prompt: [_______________________________]                  │
+│  [Générer le poster]                                        │
+│  [Aperçu poster 2:3]                                        │
+│                                                              │
+│  ─────────── Séparateur ───────────                         │
+│                                                              │
+│  ── Vignette Matchday ──                                    │
+│  "Image simplifiée avec les identités des deux équipes"     │
+│                                                              │
+│  ┌─────────┐     VS     ┌─────────┐   ← Logos récupérés    │
+│  │ Logo    │            │ Logo    │     de la table teams   │
+│  │ Home    │            │ Away    │                          │
+│  └─────────┘            └─────────┘                         │
+│                                                              │
+│  Prompt: [_______________________________]                  │
+│  [Générer la vignette IA]  [URL manuelle]                   │
+│  [Aperçu vignette 16:9]                                     │
+│                                                              │
+└──────────────────────────────────────────────────────────────┘
 ```
 
-## Fichier a modifier
+**5. Prompt de generation de la vignette** : Un template specifique inspire de l'image de reference :
 
-| Fichier | Modification |
-|---------|--------------|
-| `src/pages/CatalogPage.tsx` | Remplacer le `Sheet` par un `Dialog` plein ecran avec layout 2 colonnes et onglets |
+```text
+Create a clean, modern matchday card image (16:9 landscape ratio) for a sports event.
 
-Aucun nouveau fichier necessaire -- tout reste dans `CatalogPage.tsx` pour garder la simplicite actuelle.
+Layout:
+- Split background with two team identity colors (diagonal or vertical split)
+- Left side: visual representation of {{HOME_TEAM}} with their team emblem/crest style
+- Right side: visual representation of {{AWAY_TEAM}} with their team emblem/crest style
+- Both sides feature large, prominent team emblems/crests
+- Bottom overlay: event badge with "À venir" or competition name
 
-## Details techniques
+Teams: {{HOME_TEAM}} vs {{AWAY_TEAM}}
+Competition: {{LEAGUE}}
+Date: {{EVENT_DATE}}
 
-### 1. Remplacement Sheet → Dialog fullscreen
-
-Le `Sheet` sera remplace par un `Dialog` avec `DialogContent` en plein ecran :
-
-```typescript
-<Dialog open={!!selectedEvent} onOpenChange={(open) => !open && setSelectedEvent(null)}>
-  <DialogContent className="max-w-[95vw] w-full max-h-[95vh] h-full p-0 gap-0">
-    ...
-  </DialogContent>
-</Dialog>
+Style: bold colors, clean geometric shapes, professional sports broadcast aesthetic, similar to NFL Sunday Ticket / YouTube TV matchday cards.
+No real logos, no watermarks. Use stylized crests inspired by each team's identity.
 ```
 
-### 2. Layout deux colonnes
+**6. Fonction `handleGenerateThumbnail`** : Appel a la meme Edge Function `admin-ai-image` avec le prompt vignette. Le resultat est stocke dans `editForm.thumbnail_url`.
 
-```typescript
-<div className="flex h-full">
-  {/* Colonne gauche - Preview */}
-  <div className="w-[40%] border-r bg-muted/30 p-6 flex flex-col">
-    {/* Image preview en ratio 2:3 */}
-    {/* Infos cles de l'evenement */}
-  </div>
+**7. Sauvegarde** : `handleSaveOnly` et `handleSaveAndPromote` incluront `thumbnail_url` dans les updates envoyees a la base.
 
-  {/* Colonne droite - Edition */}
-  <div className="flex-1 flex flex-col">
-    {/* Header avec titre */}
-    {/* Tabs: Contenu | Image | Diffusion | Tarification */}
-    {/* Footer sticky avec boutons d'action */}
-  </div>
-</div>
-```
+**8. Preview colonne gauche** : Affichage de la vignette sous le poster principal en format 16:9, plus petit. Ajout d'un badge de completion "Vignette" dans les indicateurs.
 
-### 3. Organisation en onglets (Tabs)
-
-4 onglets pour structurer le formulaire :
-
-- **Contenu** : Titre personnalise + Description (avec bouton IA)
-- **Image** : Bascule IA/URL, prompt modifiable, preview, bouton generer
-- **Diffusion** : Selecteur de diffuseur avec suggestions
-- **Tarification** : Prix manuel + Tier avec explication du calcul auto
-
-### 4. Preview dynamique (colonne gauche)
-
-- Image du poster avec aspect-ratio 2:3 (ou placeholder si pas d'image)
-- Titre de l'evenement (override ou api_title)
-- Sport + Ligue en badges
-- Date et heure formatees
-- Lieu (venue)
-- Badge "En attente" pour le statut catalogue
-- Badges d'avancement : Description OK, Image OK, Broadcaster OK
-
-### 5. Footer sticky
-
-Barre d'actions fixe en bas de la colonne droite :
-
-```typescript
-<div className="border-t p-4 flex items-center justify-between mt-auto">
-  <Button variant="destructive" variant="ghost" onClick={...}>
-    <Trash2 /> Supprimer
-  </Button>
-  <div className="flex gap-3">
-    <Button variant="outline" onClick={handleSaveOnly}>Enregistrer</Button>
-    <Button onClick={handleSaveAndPromote}>
-      <Send /> Envoyer vers Evenements
-    </Button>
-  </div>
-</div>
-```
-
-### 6. Tarification fonctionnelle
-
-La section tarification reste identique en logique :
-- Champ prix manuel (number, step 0.01)
-- Selecteur de tier (Bronze/Silver/Gold) avec `TierBadge`
-- Message explicatif "Laissez vide pour le calcul automatique"
-- Lors de la promotion, si des valeurs sont renseignees, `is_manual_override` est active dans `event_pricing`
-
-### 7. Responsivite
-
-Sur ecrans plus petits (< 1024px), le layout passe en colonne unique :
-- La preview se reduit a un bandeau compact en haut
-- Le formulaire prend toute la largeur
+**9. Liste du catalogue** : Ajout d'un badge "Vignette OK" quand `thumbnail_url` est renseigne.
 
 ## Ce qui ne change PAS
 
-- Toute la logique metier (mutations, queries, generation IA)
-- Le composant `BroadcasterSelector`
-- La modale de confirmation de suppression `AlertDialog`
-- La liste des evenements du catalogue (partie gauche de la page)
-- Les filtres et stats en haut de page
+- L'Edge Function `admin-ai-image` (reutilisee avec un prompt different)
+- Le bucket de stockage `event-images`
+- Les onglets Contenu, Diffusion et Tarification
+- La logique de promotion vers draft
+
