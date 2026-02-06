@@ -1,138 +1,105 @@
 
 
-# Plan : Refonte UX/UI de la page Evenements
+# Plan : Simplification de la tarification
 
-## Constat actuel
+## Constat
 
-La page Evenements presente plusieurs problemes d'ergonomie :
-- Les **stats** sont de simples lignes de texte sans hierarchie visuelle -- difficile de lire les chiffres d'un coup d'oeil
-- Les **filtres** s'etalent sur 2 lignes avec des pills et selects melanges -- dense et peu lisible
-- Le panneau de detail s'ouvre dans un **Sheet lateral etroit** (comme l'ancien Catalogue) -- pas assez d'espace pour l'edition
-- Les **EventCards** en mode grille montrent beaucoup d'infos mais sans hierarchie claire
-- La pagination est basique et ne montre pas le nombre total d'elements
+Le systeme actuel de tarification est surdimensionne :
+- 3 tiers (Gold, Silver, Bronze) avec fourchettes de prix configurables (table `pricing_config`)
+- Un algorithme de scoring complexe (ligue, pinned, live) dans l'Edge Function
+- Un concept de "computed price vs manual override" avec toggle, 2 champs distincts
+- Un onglet "Configuration" reserve au owner pour configurer les fourchettes par tier
+- Un onglet "Historique" avec tracking granulaire des changements
+- La meme logique dupliquee dans 3 endroits (Catalogue, Events, page Pricing)
 
-## Solution proposee
+Le besoin reel est bien plus simple : **un prix entre 0,99 et 5 EUR**, suggere par l'IA (Mistral), modifiable manuellement.
 
-### 1. Stats en cartes visuelles
+## Nouvelle logique
 
-Remplacer les lignes de stats inline par des **KPI cards** avec un design plus visuel (comme le Dashboard) :
-- 4 cartes principales : Total, Publies, En direct (avec pulse), Brouillons
-- Ligne secondaire compacte pour les stats temporelles (A venir, En cours, Termines)
-- Chaque carte cliquable pour filtrer directement
+- **1 seul champ** : `price` (numeric, sur la table `events` directement)
+- **Plus de tiers** (Gold/Silver/Bronze) : suppression du concept
+- **Plus de table `pricing_config`** : inutile
+- **Plus de `computed_price` vs `manual_price`** : un seul prix, point final
+- **Suggestion IA** : Mistral analyse le contexte (sport, ligue, equipes, date) et propose un prix entre 0,99 EUR et 5,00 EUR
+- **Modification manuelle** : un simple champ input numerique pour ajuster le prix suggere
 
-### 2. Barre de filtres repensee
+## Modifications
 
-Reorganiser les filtres en une seule ligne compacte et claire :
-- Barre de recherche a gauche
-- Selecteurs de statut sous forme de **Tabs** au lieu de pills (plus lisible)
-- Filtres secondaires (sport, ligue, temporel) dans un panneau "Filtres avances" pliable
-- Toggle Live et Epingles restent accessibles en permanence
-- Vue grille/liste a droite
+### 1. Base de donnees
 
-### 3. EventCard amelioree
+Migration pour ajouter une colonne `price` directement sur la table `events` :
 
-Ameliorer les cartes pour une meilleure lisibilite :
-- Image plus grande avec overlay gradient ameliore
-- Informations structurees : date en haut a gauche, statut en haut a droite
-- Zone basse avec titre, equipes et infos de prix plus lisibles
-- Actions rapides au survol dans un overlay semi-transparent
-
-### 4. EventDetailPanel en plein ecran (comme le Catalogue)
-
-Transformer le `Sheet` lateral en `Dialog` plein ecran avec layout 2 colonnes, reprenant le meme pattern que le configurateur Catalogue :
-
-```text
-+----------------------------------------------------------------------+
-|  < Retour                  Detail de l'evenement          [Actions]  |
-+----------------------------------------------------------------------+
-|                              |                                        |
-|  PREVIEW (40%)              |  EDITION (60%)                         |
-|                              |                                        |
-|  +------------------------+ |  [Infos] [Editorial] [Geo] [Prix]     |
-|  |                        | |                                        |
-|  |    Image poster        | |  -- Onglet Infos (lecture seule) --    |
-|  |    ou vignette         | |  Titre API, Description, Sport, Ligue  |
-|  |                        | |  Equipes, Date, Lieu                   |
-|  +------------------------+ |                                        |
-|                              |  -- Onglet Editorial --               |
-|  Equipe A vs Equipe B      |  Titre personnalise                    |
-|  Football - La Liga         |  Description personnalisee             |
-|  06/02/2026 21:00           |  URL image personnalisee               |
-|                              |                                        |
-|  Statut : Publie            |  -- Onglet Geo --                      |
-|  Prix : 9.99 EUR            |  Pays autorises / bloques              |
-|  Tier : Gold                |                                        |
-|                              |  -- Onglet Prix --                     |
-|                              |  Surcharge manuelle (switch)           |
-|                              |  Prix / Tier manuels                   |
-|                              |  Recalcul automatique                  |
-+----------------------------------------------------------------------+
-|  [Archiver]        [Publier/Depublier]  [Enregistrer]               |
-+----------------------------------------------------------------------+
+```sql
+ALTER TABLE public.events ADD COLUMN price NUMERIC(5,2) DEFAULT NULL;
 ```
 
-### 5. Pagination amelioree
+Les tables `event_pricing`, `event_pricing_history` et `pricing_config` restent en place (pas de suppression de donnees) mais ne seront plus utilisees par le code.
 
-Ajouter un compteur "Affichage X-Y sur Z resultats" a cote de la pagination et ameliorer la navigation pour les grands ensembles de donnees.
+### 2. Edge Function : `admin-ai-suggest-price` (nouvelle)
 
-## Fichiers a modifier
+Nouvelle Edge Function qui utilise Mistral (deja configure avec `MISTRAL_API_KEY`) pour suggerer un prix :
 
-| Fichier | Modification |
-|---------|-------------|
-| `src/pages/EventsPage.tsx` | Restructuration du layout general avec les nouvelles sections |
-| `src/components/events/EventsStats.tsx` | Redesign en cartes KPI cliquables |
-| `src/components/events/EventFilters.tsx` | Reorganisation en tabs + filtres avances pliables |
-| `src/components/events/EventCard.tsx` | Amelioration du design visuel et de la hierarchie d'infos |
-| `src/components/events/EventDetailPanel.tsx` | Transformation Sheet vers Dialog plein ecran 2 colonnes avec Tabs |
+- Recoit : sport, ligue, equipes, date
+- Prompt : "En tant qu'expert du streaming sportif, propose un prix unitaire entre 0,99 et 5,00 EUR pour cet evenement. Reponds uniquement avec le nombre (ex: 2.99)."
+- Retourne : `{ price: 2.99 }`
 
-## Details techniques
+### 3. Page Pricing (`src/pages/PricingPage.tsx`)
 
-### EventsStats.tsx -- Cartes KPI
+Simplification radicale :
+- Suppression de l'onglet "Configuration" (plus de tiers a configurer)
+- Suppression de l'onglet "Historique" (complexite inutile)
+- **Vue unique** : tableau des evenements avec leur prix, un bouton "Suggerer par IA" par ligne, et un champ editable pour le prix
+- Stats simplifiees : nombre total, prix moyen, evenements sans prix
 
-Les stats passent de simples lignes a des cartes structurees :
-- Grille de 4 colonnes pour les stats principales (total, publies, live, brouillons)
-- Chaque carte affiche : icone, valeur grande, label, et couleur thematique
-- La carte "Live" integre le pulse animation
-- Les stats temporelles restent en ligne compacte en dessous
-- Ajout d'un `onClick` sur chaque carte pour appliquer le filtre correspondant
+### 4. Configurateur Events (`EventDetailPanel.tsx`)
 
-### EventFilters.tsx -- Tabs + filtres avances
+Remplacement de l'onglet "Prix" complexe (toggle override, tier, computed vs manual) par :
+- Un champ prix simple (input numerique, 0.99 - 5.00 EUR)
+- Un bouton "Suggerer par IA" qui appelle Mistral et pre-remplit le champ
+- Affichage du prix actuel dans la preview a gauche
 
-- Remplacement des pills statut par un composant `Tabs` natif de shadcn (Tous / Brouillon / Publie / Archive)
-- Les filtres secondaires (sport, ligue, temporel, live, epingled) sont regroupes dans un panneau `Collapsible` "Filtres avances"
-- La recherche et le toggle vue restent toujours visibles
-- Un badge compteur sur "Filtres avances" indique le nombre de filtres actifs
+### 5. Configurateur Catalogue (`CatalogPage.tsx`)
 
-### EventCard.tsx -- Ameliorations visuelles
+Meme simplification dans l'onglet Tarification :
+- Input prix simple au lieu du systeme tier + prix manuel
+- Bouton "Suggerer par IA"
+- Suppression des references aux tiers
 
-- Augmentation du ratio de l'image (de aspect-video a plus grand)
-- Le prix s'affiche en bas a droite avec un fond semi-transparent
-- Le tier s'affiche sous forme de badge couleur integre a l'image
-- Les badges Live/Pinned sont repositionnes pour moins de chevauchement
-- Animation d'entree plus fluide
+### 6. Hooks et mutations
 
-### EventDetailPanel.tsx -- Dialog plein ecran
+- Simplification de `usePricingMutations.ts` : une seule mutation `useUpdateEventPrice` qui fait un simple `UPDATE events SET price = X WHERE id = Y`
+- Suppression des hooks `useUpdatePricingConfig`, `useBatchRecompute`, `useRecomputeEventPricing`, `useRevertToComputed`
+- Simplification de `usePricing.ts` : suppression des queries liees a `pricing_config` et `event_pricing`
 
-Transformation complete identique au configurateur Catalogue :
-- `Sheet` remplace par `Dialog` avec `DialogContent` en `max-w-[95vw] h-[95vh]`
-- Layout flex 2 colonnes (40/60)
-- Colonne gauche : preview avec image, metadonnees, statut, prix actuel
-- Colonne droite : 4 onglets (Infos, Editorial, Geo, Tarification) via `Tabs`
-- Footer sticky avec actions (Archiver, Supprimer, Publier/Depublier, Enregistrer)
-- Responsive : empilement vertical sous 1024px
+### 7. Composants supprimes ou simplifies
 
-### EventsPage.tsx -- Orchestration
+| Composant | Action |
+|-----------|--------|
+| `PricingConfigTab.tsx` | Supprime (plus de config tiers) |
+| `PricingConfigEditDialog.tsx` | Supprime |
+| `PricingHistoryTab.tsx` | Supprime |
+| `PricingHistoryRow.tsx` | Supprime |
+| `PricingEditDialog.tsx` | Simplifie (champ prix + bouton IA) |
+| `PricingEventsTab.tsx` | Simplifie (prix editable inline) |
+| `PricingEventsRow.tsx` | Simplifie (affichage prix, pas de tier) |
+| `PricingStats.tsx` | Simplifie (total, prix moyen, sans prix) |
+| `PricingFilters.tsx` | Simplifie (recherche + filtre "avec/sans prix") |
+| `TierBadge.tsx` | Conserve pour retrocompatibilite mais plus utilise dans pricing |
 
-- Integration des props `onClickStat` dans `EventsStats` pour filtrage rapide
-- Mise a jour du compteur de pagination "X-Y sur Z"
-- Pas de changement dans la logique metier (mutations, hooks, etc.)
+### 8. Edge Function `admin-pricing-recompute`
 
-## Ce qui ne change PAS
+N'est plus appelee depuis l'interface. Reste deployee pour retrocompatibilite mais n'est plus referencee.
 
-- Les hooks de donnees (`useEvents`, `useEventsStats`, `useEventMutations`)
-- La logique metier (publish, unpublish, archive, delete, pricing)
-- Le composant `DeleteEventDialog`
-- Les badges existants (`StatusBadge`, `TierBadge`, `LiveBadge`, etc.)
-- Le composant `EventRow` (vue liste) -- ameliorations mineures seulement
-- Le composant `CountryTagsInput`
+## Resume du flux simplifie
+
+```text
+Catalogue/Evenement → Onglet Prix
+  ┌────────────────────────────────────────┐
+  │  Prix de vente                         │
+  │  ┌──────────┐  [Suggerer par IA]      │
+  │  │  2.99 €  │                          │
+  │  └──────────┘                          │
+  │  Min: 0.99 € — Max: 5.00 €            │
+  └────────────────────────────────────────┘
+```
 
