@@ -1,105 +1,134 @@
 
 
-# Plan : Simplification de la tarification
+# Plan : Refonte de la page Utilisateurs (Admin + App Grand Public)
 
-## Constat
+## Objectif
 
-Le systeme actuel de tarification est surdimensionne :
-- 3 tiers (Gold, Silver, Bronze) avec fourchettes de prix configurables (table `pricing_config`)
-- Un algorithme de scoring complexe (ligue, pinned, live) dans l'Edge Function
-- Un concept de "computed price vs manual override" avec toggle, 2 champs distincts
-- Un onglet "Configuration" reserve au owner pour configurer les fourchettes par tier
-- Un onglet "Historique" avec tracking granulaire des changements
-- La meme logique dupliquee dans 3 endroits (Catalogue, Events, page Pricing)
+Transformer la page `/users` en une page a **deux onglets principaux** :
+1. **Administrateurs** : gestion des admins de cette application (existant, ameliore)
+2. **Utilisateurs App** : consultation et gestion des utilisateurs de l'application Stadio grand public, en se connectant a leur base de donnees externe
 
-Le besoin reel est bien plus simple : **un prix entre 0,99 et 5 EUR**, suggere par l'IA (Mistral), modifiable manuellement.
+## Architecture technique
 
-## Nouvelle logique
+La connexion a la base Stadio App se fait via une **Edge Function proxy** (`admin-app-users`). Cette Edge Function utilise le service role key de la Stadio App (stocke en secret) pour requeter les utilisateurs `auth.users` du projet externe. On ne cree **jamais** un second client Supabase cote frontend -- tout passe par l'Edge Function authentifiee.
 
-- **1 seul champ** : `price` (numeric, sur la table `events` directement)
-- **Plus de tiers** (Gold/Silver/Bronze) : suppression du concept
-- **Plus de table `pricing_config`** : inutile
-- **Plus de `computed_price` vs `manual_price`** : un seul prix, point final
-- **Suggestion IA** : Mistral analyse le contexte (sport, ligue, equipes, date) et propose un prix entre 0,99 EUR et 5,00 EUR
-- **Modification manuelle** : un simple champ input numerique pour ajuster le prix suggere
+```text
+Frontend (UsersPage)
+    |
+    ├── Onglet "Administrateurs" → Client Supabase local (existant)
+    |
+    └── Onglet "Utilisateurs App" → Edge Function admin-app-users
+                                        |
+                                        └── Supabase Client (Stadio App, service_role)
+                                                |
+                                                └── auth.admin.listUsers()
+                                                    + profiles table (si existante)
+```
+
+## Secrets a ajouter
+
+Deux nouveaux secrets a configurer :
+
+| Secret | Valeur |
+|--------|--------|
+| `STADIO_APP_SUPABASE_URL` | `https://sslsaqommonvkazvdity.supabase.co` |
+| `STADIO_APP_SERVICE_ROLE_KEY` | (a fournir par l'utilisateur) |
+
+Le `SUPABASE_PUBLISHABLE_KEY` de l'app (anon key) n'est **pas suffisant** pour lister les utilisateurs -- il faut le **service_role_key** du projet Stadio App.
 
 ## Modifications
 
-### 1. Base de donnees
+### 1. Edge Function : `admin-app-users` (nouveau)
 
-Migration pour ajouter une colonne `price` directement sur la table `events` :
+Nouvelle Edge Function qui sert de proxy securise vers la Stadio App :
 
-```sql
-ALTER TABLE public.events ADD COLUMN price NUMERIC(5,2) DEFAULT NULL;
-```
+**Endpoints** (via query param `action`) :
+- `list` : liste les utilisateurs avec pagination (auth.admin.listUsers)
+- `get` : details d'un utilisateur (auth.admin.getUserById)
+- `ban` : bannir un utilisateur (auth.admin.updateUserById avec `ban_duration`)
+- `unban` : debannir un utilisateur
+- `delete` : supprimer un utilisateur (auth.admin.deleteUser)
 
-Les tables `event_pricing`, `event_pricing_history` et `pricing_config` restent en place (pas de suppression de donnees) mais ne seront plus utilisees par le code.
+Toutes les actions sont protegees par `authenticateAdmin` avec role minimum `admin`.
 
-### 2. Edge Function : `admin-ai-suggest-price` (nouvelle)
+### 2. Page UsersPage.tsx (refonte)
 
-Nouvelle Edge Function qui utilise Mistral (deja configure avec `MISTRAL_API_KEY`) pour suggerer un prix :
-
-- Recoit : sport, ligue, equipes, date
-- Prompt : "En tant qu'expert du streaming sportif, propose un prix unitaire entre 0,99 et 5,00 EUR pour cet evenement. Reponds uniquement avec le nombre (ex: 2.99)."
-- Retourne : `{ price: 2.99 }`
-
-### 3. Page Pricing (`src/pages/PricingPage.tsx`)
-
-Simplification radicale :
-- Suppression de l'onglet "Configuration" (plus de tiers a configurer)
-- Suppression de l'onglet "Historique" (complexite inutile)
-- **Vue unique** : tableau des evenements avec leur prix, un bouton "Suggerer par IA" par ligne, et un champ editable pour le prix
-- Stats simplifiees : nombre total, prix moyen, evenements sans prix
-
-### 4. Configurateur Events (`EventDetailPanel.tsx`)
-
-Remplacement de l'onglet "Prix" complexe (toggle override, tier, computed vs manual) par :
-- Un champ prix simple (input numerique, 0.99 - 5.00 EUR)
-- Un bouton "Suggerer par IA" qui appelle Mistral et pre-remplit le champ
-- Affichage du prix actuel dans la preview a gauche
-
-### 5. Configurateur Catalogue (`CatalogPage.tsx`)
-
-Meme simplification dans l'onglet Tarification :
-- Input prix simple au lieu du systeme tier + prix manuel
-- Bouton "Suggerer par IA"
-- Suppression des references aux tiers
-
-### 6. Hooks et mutations
-
-- Simplification de `usePricingMutations.ts` : une seule mutation `useUpdateEventPrice` qui fait un simple `UPDATE events SET price = X WHERE id = Y`
-- Suppression des hooks `useUpdatePricingConfig`, `useBatchRecompute`, `useRecomputeEventPricing`, `useRevertToComputed`
-- Simplification de `usePricing.ts` : suppression des queries liees a `pricing_config` et `event_pricing`
-
-### 7. Composants supprimes ou simplifies
-
-| Composant | Action |
-|-----------|--------|
-| `PricingConfigTab.tsx` | Supprime (plus de config tiers) |
-| `PricingConfigEditDialog.tsx` | Supprime |
-| `PricingHistoryTab.tsx` | Supprime |
-| `PricingHistoryRow.tsx` | Supprime |
-| `PricingEditDialog.tsx` | Simplifie (champ prix + bouton IA) |
-| `PricingEventsTab.tsx` | Simplifie (prix editable inline) |
-| `PricingEventsRow.tsx` | Simplifie (affichage prix, pas de tier) |
-| `PricingStats.tsx` | Simplifie (total, prix moyen, sans prix) |
-| `PricingFilters.tsx` | Simplifie (recherche + filtre "avec/sans prix") |
-| `TierBadge.tsx` | Conserve pour retrocompatibilite mais plus utilise dans pricing |
-
-### 8. Edge Function `admin-pricing-recompute`
-
-N'est plus appelee depuis l'interface. Reste deployee pour retrocompatibilite mais n'est plus referencee.
-
-## Resume du flux simplifie
+Restructuration avec **Tabs** (shadcn) en haut :
 
 ```text
-Catalogue/Evenement → Onglet Prix
-  ┌────────────────────────────────────────┐
-  │  Prix de vente                         │
-  │  ┌──────────┐  [Suggerer par IA]      │
-  │  │  2.99 €  │                          │
-  │  └──────────┘                          │
-  │  Min: 0.99 € — Max: 5.00 €            │
-  └────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│  Utilisateurs                          [+ Admin]        │
+├─────────────────────────────────────────────────────────┤
+│  [Administrateurs]  [Utilisateurs App]                  │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│  (contenu de l'onglet selectionne)                      │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
 ```
+
+**Onglet Administrateurs** : le contenu actuel (stats KPI, filtres, table, panel de detail) reorganise dans un sous-composant `AdminUsersTab`.
+
+**Onglet Utilisateurs App** : nouveau composant `AppUsersTab` avec :
+- Stats KPI : Total utilisateurs, Actifs, Bannis, Nouveaux (30j)
+- Barre de recherche (email, nom)
+- Tableau : Avatar, Email, Nom, Date d'inscription, Derniere connexion, Statut (actif/banni), Actions
+- Panel de detail (Dialog plein ecran comme les evenements) avec :
+  - Infos utilisateur (email, metadata, dates)
+  - Actions : Bannir / Debannir / Supprimer
+
+### 3. Hook : `useAppUsers.ts` (nouveau)
+
+Hook React Query pour appeler l'Edge Function `admin-app-users` :
+- `useAppUsers(filters)` : liste paginee
+- `useAppUserStats()` : compteurs
+- `useAppUserMutations()` : ban, unban, delete
+
+### 4. Composants nouveaux
+
+| Composant | Description |
+|-----------|-------------|
+| `src/components/users/AdminUsersTab.tsx` | Encapsule le contenu actuel de la page (stats, filtres, table admin) |
+| `src/components/users/AppUsersTab.tsx` | Nouvel onglet pour les utilisateurs de l'app grand public |
+| `src/components/users/AppUserTable.tsx` | Tableau des utilisateurs app |
+| `src/components/users/AppUserRow.tsx` | Ligne du tableau utilisateur app |
+| `src/components/users/AppUserDetailPanel.tsx` | Dialog de detail utilisateur app |
+| `src/components/users/AppUserStats.tsx` | Cartes KPI pour les utilisateurs app |
+| `src/components/users/AppUserFilters.tsx` | Filtres pour les utilisateurs app |
+| `src/components/users/AppUserStatusBadge.tsx` | Badge statut (actif, banni, non confirme) |
+
+### 5. Composants existants reorganises
+
+Les composants actuels (`UserStats`, `UserFilters`, `UserTable`, `UserRow`, `UserDetailPanel`, `AddUserDialog`) restent inchanges mais sont encapsules dans `AdminUsersTab.tsx`.
+
+## Requete RLS pour la Stadio App
+
+Voici la requete SQL a executer dans le projet Stadio App pour permettre a l'admin de lister les profils utilisateurs (si une table `profiles` existe avec RLS) :
+
+```sql
+-- Option 1 : Si vous voulez que le service_role puisse tout lire (par defaut c'est deja le cas)
+-- Le service_role_key bypass automatiquement les RLS, donc aucune modification n'est necessaire.
+
+-- Option 2 : Si vous souhaitez creer une policy specifique pour un acces API-key
+-- (pas necessaire si on utilise service_role_key, car il bypass RLS)
+
+-- Verification : s'assurer que RLS est active sur profiles
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+
+-- Policy pour permettre la lecture via service role (deja implicite, mais pour documenter) :
+-- Le service_role bypass RLS par defaut dans Supabase, donc aucune policy supplementaire n'est requise.
+
+-- Si vous avez des tables supplementaires (purchases, subscriptions, etc.) que l'admin
+-- devrait pouvoir consulter, le service_role_key les lira automatiquement.
+```
+
+**En resume** : avec le `service_role_key`, aucune modification RLS n'est necessaire sur le projet Stadio App. Le service role bypass automatiquement toutes les policies RLS.
+
+## Ce qui ne change PAS
+
+- Le systeme d'authentification admin (AuthContext)
+- Les hooks existants (`useUsers`, `useUserMutations`, `useOwnerCount`)
+- Les composants existants de gestion admin (simplement deplaces dans un sous-composant)
+- La sidebar (le lien `/users` reste le meme)
+- Les RLS du projet admin actuel
 
