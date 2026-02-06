@@ -10,7 +10,7 @@ import LoginPage from "@/pages/LoginPage";
 import DashboardPage from "@/pages/DashboardPage";
 import EventsPage from "@/pages/EventsPage";
 import PricingPage from "@/pages/PricingPage";
-import CategoriesPage from "@/pages/CategoriesPage";
+
 import OriginalsPage from "@/pages/OriginalsPage";
 import AuthorsPage from "@/pages/AuthorsPage";
 import UsersPage from "@/pages/UsersPage";
@@ -72,7 +72,7 @@ function AppRoutes() {
         <Route path="/catalog" element={<CatalogPage />} />
         <Route path="/events" element={<EventsPage />} />
         <Route path="/pricing" element={<PricingPage />} />
-        <Route path="/categories" element={<CategoriesPage />} />
+        
         <Route path="/originals" element={<OriginalsPage />} />
         <Route path="/authors" element={<AuthorsPage />} />
         <Route path="/users" element={<UsersPage />} />
