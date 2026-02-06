@@ -1,18 +1,23 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { format } from "date-fns";
+import { format, formatDistanceToNow } from "date-fns";
 import { fr } from "date-fns/locale";
 import { toast } from "sonner";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
 import { BroadcasterSelector } from "@/components/catalog/BroadcasterSelector";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -20,13 +25,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-} from "@/components/ui/sheet";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -38,23 +36,29 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
+  ArrowLeft,
   Calendar,
+  CheckCircle2,
   DollarSign,
   Edit,
+  FileText,
   ImageIcon,
   Link2,
   Loader2,
+  MapPin,
   Package,
   Radio,
   RefreshCw,
   Send,
+  Sparkles,
   Trash2,
   Trophy,
   Search,
   Filter,
-  Sparkles,
+  Tv,
 } from "lucide-react";
 import type { Database } from "@/integrations/supabase/types";
+import { TierBadge } from "@/components/admin/TierBadge";
 
 type PricingTier = Database["public"]["Enums"]["pricing_tier"];
 
@@ -169,13 +173,11 @@ export default function CatalogPage() {
   // Delete event mutation
   const deleteEventMutation = useMutation({
     mutationFn: async (eventId: string) => {
-      // Supprimer d'abord le pricing associé
       await supabase
         .from('event_pricing')
         .delete()
         .eq('event_id', eventId);
       
-      // Puis supprimer l'événement
       const { error } = await supabase
         .from('events')
         .delete()
@@ -197,7 +199,6 @@ export default function CatalogPage() {
   // Promote to draft mutation
   const promoteToDraftMutation = useMutation({
     mutationFn: async (eventId: string) => {
-      // Update event to draft status
       const { error: eventError } = await supabase
         .from('events')
         .update({
@@ -208,7 +209,6 @@ export default function CatalogPage() {
       
       if (eventError) throw eventError;
 
-      // Always create/update pricing entry
       const hasManualValues = !!(editForm.manual_price || editForm.manual_tier);
       const manualPriceValue = editForm.manual_price ? parseFloat(editForm.manual_price) : null;
       
@@ -218,7 +218,6 @@ export default function CatalogPage() {
           event_id: eventId,
           manual_price: manualPriceValue,
           manual_tier: editForm.manual_tier || null,
-          // Set computed values equal to manual values when manual override is active
           computed_price: hasManualValues ? manualPriceValue : null,
           computed_tier: hasManualValues ? (editForm.manual_tier || null) : null,
           is_manual_override: hasManualValues,
@@ -238,7 +237,7 @@ export default function CatalogPage() {
     },
   });
 
-  // Generate default image prompt based on event data - Cinematic template
+  // Generate default image prompt based on event data
   const generateDefaultImagePrompt = (event: CatalogEvent) => {
     const eventName = event.override_title || event.api_title || 
       `${event.home_team || ''} vs ${event.away_team || ''}`.trim() || 'Sports Event';
@@ -267,7 +266,7 @@ Camera: low-angle shot, 85mm lens look, dramatic perspective.
 Final output: vertical poster, 1024x1536 or higher, suitable for mobile app thumbnail.`;
   };
 
-  const openEditSheet = (event: CatalogEvent) => {
+  const openConfigurator = (event: CatalogEvent) => {
     setSelectedEvent(event);
     setEditForm({
       override_title: event.override_title || "",
@@ -284,9 +283,7 @@ Final output: vertical poster, 1024x1536 or higher, suitable for mobile app thum
 
   const handleSaveAndPromote = async () => {
     if (!selectedEvent) return;
-
     try {
-      // 1. Mise à jour silencieuse (sans toast) - appel direct à Supabase
       const { error: updateError } = await supabase
         .from('events')
         .update({
@@ -298,10 +295,7 @@ Final output: vertical poster, 1024x1536 or higher, suitable for mobile app thum
           updated_at: new Date().toISOString(),
         })
         .eq('id', selectedEvent.id);
-
       if (updateError) throw updateError;
-
-      // 2. Promotion vers draft (avec toast de succès)
       await promoteToDraftMutation.mutateAsync(selectedEvent.id);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Erreur lors de la publication');
@@ -310,7 +304,6 @@ Final output: vertical poster, 1024x1536 or higher, suitable for mobile app thum
 
   const handleSaveOnly = async () => {
     if (!selectedEvent) return;
-
     await updateEventMutation.mutateAsync({
       eventId: selectedEvent.id,
       updates: {
@@ -325,15 +318,10 @@ Final output: vertical poster, 1024x1536 or higher, suitable for mobile app thum
 
   const handleGenerateDescription = async () => {
     if (!selectedEvent) return;
-
     setIsGeneratingDescription(true);
     try {
       const session = await supabase.auth.getSession();
-      if (!session.data.session) {
-        toast.error('Non authentifié');
-        return;
-      }
-
+      if (!session.data.session) { toast.error('Non authentifié'); return; }
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-ai-description`,
         {
@@ -355,17 +343,9 @@ Final output: vertical poster, 1024x1536 or higher, suitable for mobile app thum
           }),
         }
       );
-
       const result = await response.json();
-
-      if (!response.ok || !result.success) {
-        throw new Error(result.error || 'Erreur lors de la génération');
-      }
-
-      setEditForm(prev => ({
-        ...prev,
-        override_description: result.data.description,
-      }));
+      if (!response.ok || !result.success) throw new Error(result.error || 'Erreur lors de la génération');
+      setEditForm(prev => ({ ...prev, override_description: result.data.description }));
       toast.success('Description générée avec succès');
     } catch (error) {
       console.error('Error generating description:', error);
@@ -380,15 +360,10 @@ Final output: vertical poster, 1024x1536 or higher, suitable for mobile app thum
       toast.error('Veuillez saisir un prompt pour l\'image');
       return;
     }
-
     setIsGeneratingImage(true);
     try {
       const session = await supabase.auth.getSession();
-      if (!session.data.session) {
-        toast.error('Non authentifié');
-        return;
-      }
-
+      if (!session.data.session) { toast.error('Non authentifié'); return; }
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-ai-image`,
         {
@@ -397,23 +372,12 @@ Final output: vertical poster, 1024x1536 or higher, suitable for mobile app thum
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${session.data.session.access_token}`,
           },
-          body: JSON.stringify({
-            prompt: imagePrompt,
-            eventId: selectedEvent.id,
-          }),
+          body: JSON.stringify({ prompt: imagePrompt, eventId: selectedEvent.id }),
         }
       );
-
       const result = await response.json();
-
-      if (!response.ok || !result.success) {
-        throw new Error(result.error || 'Erreur lors de la génération');
-      }
-
-      setEditForm(prev => ({
-        ...prev,
-        override_image_url: result.data.imageUrl,
-      }));
+      if (!response.ok || !result.success) throw new Error(result.error || 'Erreur lors de la génération');
+      setEditForm(prev => ({ ...prev, override_image_url: result.data.imageUrl }));
       toast.success('Image générée avec succès');
     } catch (error) {
       console.error('Error generating image:', error);
@@ -430,6 +394,16 @@ Final output: vertical poster, 1024x1536 or higher, suitable for mobile app thum
     acc[sportKey].push(event);
     return acc;
   }, {} as Record<string, CatalogEvent[]>);
+
+  const getEventTitle = (event: CatalogEvent) =>
+    event.override_title || event.api_title || `${event.home_team || '?'} vs ${event.away_team || '?'}`;
+
+  const imageUrl = editForm.override_image_url;
+
+  // Completion badges helper
+  const hasDescription = !!editForm.override_description;
+  const hasImage = !!editForm.override_image_url;
+  const hasBroadcaster = !!editForm.broadcaster;
 
   return (
     <div className="space-y-6">
@@ -545,13 +519,13 @@ Final output: vertical poster, 1024x1536 or higher, suitable for mobile app thum
                     <Card 
                       key={event.id} 
                       className="hover:border-primary/50 transition-colors cursor-pointer"
-                      onClick={() => openEditSheet(event)}
+                      onClick={() => openConfigurator(event)}
                     >
                       <CardContent className="p-4">
                         <div className="flex items-center gap-4">
                           <div className="flex-1 min-w-0">
                             <div className="font-medium">
-                              {event.override_title || event.api_title || `${event.home_team} vs ${event.away_team}`}
+                              {getEventTitle(event)}
                             </div>
                             <div className="text-sm text-muted-foreground flex items-center gap-2 mt-1">
                               <Calendar className="h-3 w-3" />
@@ -563,7 +537,6 @@ Final output: vertical poster, 1024x1536 or higher, suitable for mobile app thum
                                 </>
                               )}
                             </div>
-                            
                             <div className="flex items-center gap-2 mt-2 flex-wrap">
                               {event.broadcaster ? (
                                 <Badge variant="default" className="text-xs">
@@ -577,32 +550,24 @@ Final output: vertical poster, 1024x1536 or higher, suitable for mobile app thum
                                 </Badge>
                               )}
                               {event.override_description && (
-                                <Badge variant="secondary" className="text-xs">
-                                  Description ✓
-                                </Badge>
+                                <Badge variant="secondary" className="text-xs">Description ✓</Badge>
                               )}
                               {event.override_image_url && (
                                 <Badge variant="secondary" className="text-xs">
-                                  <ImageIcon className="h-3 w-3 mr-1" />
-                                  Image ✓
+                                  <ImageIcon className="h-3 w-3 mr-1" />Image ✓
                                 </Badge>
                               )}
                             </div>
                           </div>
-
                           <div className="flex items-center gap-2">
-                            <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); openEditSheet(event); }}>
+                            <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); openConfigurator(event); }}>
                               <Edit className="h-4 w-4 mr-2" />
                               Configurer
                             </Button>
                             <Button 
-                              variant="ghost" 
-                              size="sm"
+                              variant="ghost" size="sm"
                               className="text-muted-foreground hover:text-destructive"
-                              onClick={(e) => { 
-                                e.stopPropagation(); 
-                                setEventToDelete(event); 
-                              }}
+                              onClick={(e) => { e.stopPropagation(); setEventToDelete(event); }}
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>
@@ -618,303 +583,409 @@ Final output: vertical poster, 1024x1536 or higher, suitable for mobile app thum
         </ScrollArea>
       )}
 
-      {/* Edit Sheet */}
-      <Sheet open={!!selectedEvent} onOpenChange={(open) => !open && setSelectedEvent(null)}>
-        <SheetContent className="w-[500px] sm:max-w-[500px] overflow-y-auto">
-          <SheetHeader>
-            <SheetTitle>Configurer l'événement</SheetTitle>
-            <SheetDescription>
-              {selectedEvent?.api_title || `${selectedEvent?.home_team} vs ${selectedEvent?.away_team}`}
-            </SheetDescription>
-          </SheetHeader>
+      {/* ===== FULLSCREEN CONFIGURATOR DIALOG ===== */}
+      <Dialog open={!!selectedEvent} onOpenChange={(open) => !open && setSelectedEvent(null)}>
+        <DialogContent className="max-w-[95vw] w-full h-[95vh] p-0 gap-0 flex flex-col overflow-hidden">
+          <DialogTitle className="sr-only">
+            Configurer l'événement
+          </DialogTitle>
 
-          <div className="mt-6 space-y-6">
-            {/* Event info */}
-            <div className="bg-muted/50 rounded-lg p-4">
-              <div className="text-sm space-y-1">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Sport:</span>
-                  <span className="font-medium">{selectedEvent?.sport}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Ligue:</span>
-                  <span className="font-medium">{selectedEvent?.league || '-'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Date:</span>
-                  <span className="font-medium">
-                    {selectedEvent && format(new Date(selectedEvent.event_date), "dd/MM/yyyy HH:mm")}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <Separator />
-
-            {/* Title override */}
-            <div className="space-y-2">
-              <Label htmlFor="override_title">Titre personnalisé</Label>
-              <Input
-                id="override_title"
-                placeholder={selectedEvent?.api_title || "Titre de l'événement"}
-                value={editForm.override_title}
-                onChange={(e) => setEditForm(prev => ({ ...prev, override_title: e.target.value }))}
-              />
-            </div>
-
-            {/* Description */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="override_description">Description</Label>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={handleGenerateDescription}
-                  disabled={isGeneratingDescription}
-                  className="gap-1.5"
-                >
-                  {isGeneratingDescription ? (
-                    <>
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      Génération...
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="h-3.5 w-3.5" />
-                      Générer avec IA
-                    </>
-                  )}
-                </Button>
-              </div>
-              <Textarea
-                id="override_description"
-                placeholder="Description de l'événement pour les utilisateurs..."
-                value={editForm.override_description}
-                onChange={(e) => setEditForm(prev => ({ ...prev, override_description: e.target.value }))}
-                rows={3}
-              />
-            </div>
-
-            {/* Image Section */}
-            <Card className="bg-muted/30 border-dashed">
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-sm flex items-center gap-2">
-                    <ImageIcon className="h-4 w-4" />
-                    Image de l'événement
-                  </CardTitle>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant={!showManualImageUrl ? "secondary" : "ghost"}
-                      size="sm"
-                      onClick={() => setShowManualImageUrl(false)}
-                      className="text-xs h-7"
-                    >
-                      <Sparkles className="h-3 w-3 mr-1" />
-                      IA
-                    </Button>
-                    <Button
-                      variant={showManualImageUrl ? "secondary" : "ghost"}
-                      size="sm"
-                      onClick={() => setShowManualImageUrl(true)}
-                      className="text-xs h-7"
-                    >
-                      <Link2 className="h-3 w-3 mr-1" />
-                      URL
-                    </Button>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {!showManualImageUrl ? (
-                  <>
-                    {/* AI Prompt Input */}
-                    <div className="space-y-2">
-                      <Label htmlFor="image_prompt" className="text-xs text-muted-foreground">
-                        Prompt pour l'IA (modifiable)
-                      </Label>
-                      <Textarea
-                        id="image_prompt"
-                        placeholder="Décrivez l'image souhaitée..."
-                        value={imagePrompt}
-                        onChange={(e) => setImagePrompt(e.target.value)}
-                        rows={10}
-                        className="text-xs font-mono"
-                      />
-                    </div>
-                    
-                    {/* Generate Button */}
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={handleGenerateImage}
-                      disabled={isGeneratingImage || !imagePrompt.trim()}
-                      className="w-full gap-2"
-                    >
-                      {isGeneratingImage ? (
-                        <>
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          Génération en cours...
-                        </>
-                      ) : (
-                        <>
-                          <Sparkles className="h-4 w-4" />
-                          Générer l'image
-                        </>
-                      )}
-                    </Button>
-                  </>
-                ) : (
-                  /* Manual URL Input */
-                  <div className="space-y-2">
-                    <Label htmlFor="override_image_url" className="text-xs text-muted-foreground">
-                      URL de l'image
-                    </Label>
-                    <Input
-                      id="override_image_url"
-                      placeholder="https://..."
-                      value={editForm.override_image_url}
-                      onChange={(e) => setEditForm(prev => ({ ...prev, override_image_url: e.target.value }))}
-                    />
-                  </div>
-                )}
-
-                {/* Image Preview */}
-                {editForm.override_image_url && (
-                  <div className="relative">
-                    <img 
-                      src={`${editForm.override_image_url}${editForm.override_image_url.includes('?') ? '&' : '?'}t=${Date.now()}`} 
-                      alt="Preview" 
-                      className="w-full h-32 object-cover rounded-lg border"
-                      key={editForm.override_image_url}
-                    />
-                    <div className="absolute top-2 right-2 flex gap-1">
-                      {!showManualImageUrl && (
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          size="sm"
-                          onClick={handleGenerateImage}
-                          disabled={isGeneratingImage}
-                          className="h-7 gap-1"
-                        >
-                          <RefreshCw className={`h-3 w-3 ${isGeneratingImage ? 'animate-spin' : ''}`} />
-                          Régénérer
-                        </Button>
-                      )}
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-1 truncate">
-                      {editForm.override_image_url}
-                    </p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Broadcaster */}
-            <div className="space-y-2">
-              <Label>Diffuseur</Label>
-              <BroadcasterSelector
-                value={editForm.broadcaster ? {
-                  name: editForm.broadcaster,
-                  logo_url: editForm.broadcaster_logo_url || null,
-                } : null}
-                onChange={(b) => setEditForm(prev => ({
-                  ...prev,
-                  broadcaster: b?.name || '',
-                  broadcaster_logo_url: b?.logo_url || '',
-                }))}
-                sportId={selectedEvent?.sport_id}
-                leagueId={selectedEvent?.league_id}
-                eventDate={selectedEvent?.event_date}
-              />
-            </div>
-
-            {/* Pricing section */}
-            <Card className="bg-muted/50">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm flex items-center gap-2">
-                  <DollarSign className="h-4 w-4" />
-                  Tarification (optionnel)
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="manual_price">Prix manuel (€)</Label>
-                    <Input
-                      id="manual_price"
-                      type="number"
-                      step="0.01"
-                      placeholder="9.99"
-                      value={editForm.manual_price}
-                      onChange={(e) => setEditForm(prev => ({ ...prev, manual_price: e.target.value }))}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="manual_tier">Tier</Label>
-                    <Select
-                      value={editForm.manual_tier}
-                      onValueChange={(value) => setEditForm(prev => ({ ...prev, manual_tier: value as PricingTier }))}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Sélectionner" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="bronze">Bronze</SelectItem>
-                        <SelectItem value="silver">Silver</SelectItem>
-                        <SelectItem value="gold">Gold</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Laissez vide pour utiliser le calcul automatique
-                </p>
-              </CardContent>
-            </Card>
-
-            {/* Delete button */}
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={() => setEventToDelete(selectedEvent)}
-              className="w-full"
-            >
-              <Trash2 className="h-4 w-4 mr-2" />
-              Supprimer l'événement
+          {/* Top bar */}
+          <div className="flex items-center justify-between border-b px-6 py-3 shrink-0">
+            <Button variant="ghost" size="sm" onClick={() => setSelectedEvent(null)} className="gap-2">
+              <ArrowLeft className="h-4 w-4" />
+              Retour au catalogue
             </Button>
-
-            <Separator className="my-2" />
-
-            {/* Actions */}
-            <div className="flex gap-3 pt-4">
-              <Button
-                variant="outline"
-                className="flex-1"
-                onClick={handleSaveOnly}
-                disabled={updateEventMutation.isPending}
-              >
-                {updateEventMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                Enregistrer
-              </Button>
-              <Button
-                className="flex-1"
-                onClick={handleSaveAndPromote}
-                disabled={updateEventMutation.isPending || promoteToDraftMutation.isPending}
-              >
-                {promoteToDraftMutation.isPending ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <Send className="h-4 w-4 mr-2" />
-                )}
-                Envoyer vers Événements
-              </Button>
-            </div>
+            <h2 className="text-sm font-semibold hidden sm:block">Configurer l'événement</h2>
+            <Button
+              variant="ghost" size="sm"
+              className="text-muted-foreground hover:text-destructive gap-2"
+              onClick={() => setEventToDelete(selectedEvent)}
+            >
+              <Trash2 className="h-4 w-4" />
+              <span className="hidden sm:inline">Supprimer</span>
+            </Button>
           </div>
-        </SheetContent>
-      </Sheet>
+
+          {selectedEvent && (
+            <div className="flex flex-1 overflow-hidden flex-col lg:flex-row">
+              {/* ===== LEFT COLUMN — PREVIEW ===== */}
+              <div className="lg:w-[40%] border-b lg:border-b-0 lg:border-r bg-muted/30 flex flex-col overflow-y-auto">
+                <div className="p-6 flex flex-col gap-5">
+                  {/* Poster image */}
+                  <div className="aspect-[2/3] w-full max-w-xs mx-auto rounded-lg overflow-hidden bg-muted border">
+                    {imageUrl ? (
+                      <img
+                        src={`${imageUrl}${imageUrl.includes('?') ? '&' : '?'}t=${Date.now()}`}
+                        alt="Event poster"
+                        className="w-full h-full object-cover"
+                        key={imageUrl}
+                      />
+                    ) : (
+                      <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground gap-3">
+                        <ImageIcon className="h-12 w-12 opacity-30" />
+                        <span className="text-sm">Aucune image</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Event info */}
+                  <div className="space-y-3">
+                    <h3 className="text-lg font-semibold leading-tight">
+                      {getEventTitle(selectedEvent)}
+                    </h3>
+
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Badge variant="secondary">{selectedEvent.sport}</Badge>
+                      {selectedEvent.league && (
+                        <Badge variant="outline">{selectedEvent.league}</Badge>
+                      )}
+                      {selectedEvent.round && (
+                        <Badge variant="outline" className="text-xs">{selectedEvent.round}</Badge>
+                      )}
+                    </div>
+
+                    <div className="text-sm space-y-1.5 text-muted-foreground">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-3.5 w-3.5 shrink-0" />
+                        <span>{format(new Date(selectedEvent.event_date), "EEEE d MMMM yyyy · HH:mm", { locale: fr })}</span>
+                      </div>
+                      {selectedEvent.venue && (
+                        <div className="flex items-center gap-2">
+                          <MapPin className="h-3.5 w-3.5 shrink-0" />
+                          <span>{selectedEvent.venue}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Status badge */}
+                    <Badge variant="outline" className="text-xs">
+                      <Package className="h-3 w-3 mr-1" />
+                      En attente de configuration
+                    </Badge>
+
+                    {/* Completion badges */}
+                    <div className="flex flex-col gap-1.5 pt-2">
+                      <CompletionBadge done={hasDescription} label="Description" />
+                      <CompletionBadge done={hasImage} label="Image" />
+                      <CompletionBadge done={hasBroadcaster} label="Diffuseur" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* ===== RIGHT COLUMN — EDITOR ===== */}
+              <div className="flex-1 flex flex-col overflow-hidden">
+                <Tabs defaultValue="content" className="flex-1 flex flex-col overflow-hidden">
+                  <div className="px-6 pt-4 shrink-0">
+                    <TabsList className="w-full justify-start">
+                      <TabsTrigger value="content" className="gap-1.5">
+                        <FileText className="h-3.5 w-3.5" />
+                        Contenu
+                      </TabsTrigger>
+                      <TabsTrigger value="image" className="gap-1.5">
+                        <ImageIcon className="h-3.5 w-3.5" />
+                        Image
+                      </TabsTrigger>
+                      <TabsTrigger value="broadcast" className="gap-1.5">
+                        <Tv className="h-3.5 w-3.5" />
+                        Diffusion
+                      </TabsTrigger>
+                      <TabsTrigger value="pricing" className="gap-1.5">
+                        <DollarSign className="h-3.5 w-3.5" />
+                        Tarification
+                      </TabsTrigger>
+                    </TabsList>
+                  </div>
+
+                  <ScrollArea className="flex-1 px-6 py-4">
+                    {/* === TAB: CONTENU === */}
+                    <TabsContent value="content" className="mt-0 space-y-6">
+                      <div className="space-y-2">
+                        <Label htmlFor="cfg_title">Titre personnalisé</Label>
+                        <Input
+                          id="cfg_title"
+                          placeholder={selectedEvent.api_title || "Titre de l'événement"}
+                          value={editForm.override_title}
+                          onChange={(e) => setEditForm(prev => ({ ...prev, override_title: e.target.value }))}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Laissez vide pour utiliser le titre API : « {selectedEvent.api_title || `${selectedEvent.home_team} vs ${selectedEvent.away_team}`} »
+                        </p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <Label htmlFor="cfg_description">Description</Label>
+                          <Button
+                            type="button" variant="outline" size="sm"
+                            onClick={handleGenerateDescription}
+                            disabled={isGeneratingDescription}
+                            className="gap-1.5"
+                          >
+                            {isGeneratingDescription ? (
+                              <><Loader2 className="h-3.5 w-3.5 animate-spin" />Génération...</>
+                            ) : (
+                              <><Sparkles className="h-3.5 w-3.5" />Générer avec IA</>
+                            )}
+                          </Button>
+                        </div>
+                        <Textarea
+                          id="cfg_description"
+                          placeholder="Description de l'événement pour les utilisateurs..."
+                          value={editForm.override_description}
+                          onChange={(e) => setEditForm(prev => ({ ...prev, override_description: e.target.value }))}
+                          rows={6}
+                        />
+                      </div>
+                    </TabsContent>
+
+                    {/* === TAB: IMAGE === */}
+                    <TabsContent value="image" className="mt-0 space-y-6">
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant={!showManualImageUrl ? "secondary" : "ghost"}
+                          size="sm" onClick={() => setShowManualImageUrl(false)}
+                          className="gap-1.5"
+                        >
+                          <Sparkles className="h-3.5 w-3.5" />IA
+                        </Button>
+                        <Button
+                          variant={showManualImageUrl ? "secondary" : "ghost"}
+                          size="sm" onClick={() => setShowManualImageUrl(true)}
+                          className="gap-1.5"
+                        >
+                          <Link2 className="h-3.5 w-3.5" />URL manuelle
+                        </Button>
+                      </div>
+
+                      {!showManualImageUrl ? (
+                        <div className="space-y-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="cfg_prompt">Prompt pour l'IA (modifiable)</Label>
+                            <Textarea
+                              id="cfg_prompt"
+                              placeholder="Décrivez l'image souhaitée..."
+                              value={imagePrompt}
+                              onChange={(e) => setImagePrompt(e.target.value)}
+                              rows={12}
+                              className="text-xs font-mono"
+                            />
+                          </div>
+                          <Button
+                            type="button" variant="outline"
+                            onClick={handleGenerateImage}
+                            disabled={isGeneratingImage || !imagePrompt.trim()}
+                            className="w-full gap-2"
+                          >
+                            {isGeneratingImage ? (
+                              <><Loader2 className="h-4 w-4 animate-spin" />Génération en cours...</>
+                            ) : (
+                              <><Sparkles className="h-4 w-4" />Générer l'image</>
+                            )}
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <Label htmlFor="cfg_image_url">URL de l'image</Label>
+                          <Input
+                            id="cfg_image_url"
+                            placeholder="https://..."
+                            value={editForm.override_image_url}
+                            onChange={(e) => setEditForm(prev => ({ ...prev, override_image_url: e.target.value }))}
+                          />
+                        </div>
+                      )}
+
+                      {/* Image preview inline */}
+                      {editForm.override_image_url && (
+                        <div className="space-y-2">
+                          <Label className="text-xs text-muted-foreground">Aperçu</Label>
+                          <div className="relative max-w-sm">
+                            <img
+                              src={`${editForm.override_image_url}${editForm.override_image_url.includes('?') ? '&' : '?'}t=${Date.now()}`}
+                              alt="Preview"
+                              className="w-full aspect-[2/3] object-cover rounded-lg border"
+                              key={editForm.override_image_url}
+                            />
+                            {!showManualImageUrl && (
+                              <Button
+                                type="button" variant="secondary" size="sm"
+                                onClick={handleGenerateImage}
+                                disabled={isGeneratingImage}
+                                className="absolute top-2 right-2 h-7 gap-1"
+                              >
+                                <RefreshCw className={`h-3 w-3 ${isGeneratingImage ? 'animate-spin' : ''}`} />
+                                Régénérer
+                              </Button>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground truncate max-w-sm">
+                            {editForm.override_image_url}
+                          </p>
+                        </div>
+                      )}
+                    </TabsContent>
+
+                    {/* === TAB: DIFFUSION === */}
+                    <TabsContent value="broadcast" className="mt-0 space-y-6">
+                      <div className="space-y-2">
+                        <Label>Diffuseur</Label>
+                        <p className="text-sm text-muted-foreground">
+                          Sélectionnez le diffuseur pour cet événement. Les suggestions sont basées sur les contrats actifs.
+                        </p>
+                        <BroadcasterSelector
+                          value={editForm.broadcaster ? {
+                            name: editForm.broadcaster,
+                            logo_url: editForm.broadcaster_logo_url || null,
+                          } : null}
+                          onChange={(b) => setEditForm(prev => ({
+                            ...prev,
+                            broadcaster: b?.name || '',
+                            broadcaster_logo_url: b?.logo_url || '',
+                          }))}
+                          sportId={selectedEvent.sport_id}
+                          leagueId={selectedEvent.league_id}
+                          eventDate={selectedEvent.event_date}
+                        />
+                      </div>
+
+                      {editForm.broadcaster && (
+                        <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 border">
+                          {editForm.broadcaster_logo_url && (
+                            <img src={editForm.broadcaster_logo_url} alt="" className="h-8 w-8 rounded object-contain" />
+                          )}
+                          <div>
+                            <div className="font-medium text-sm">{editForm.broadcaster}</div>
+                            <div className="text-xs text-muted-foreground">Diffuseur sélectionné</div>
+                          </div>
+                          <Button
+                            variant="ghost" size="sm" className="ml-auto text-muted-foreground"
+                            onClick={() => setEditForm(prev => ({ ...prev, broadcaster: '', broadcaster_logo_url: '' }))}
+                          >
+                            Retirer
+                          </Button>
+                        </div>
+                      )}
+                    </TabsContent>
+
+                    {/* === TAB: TARIFICATION === */}
+                    <TabsContent value="pricing" className="mt-0 space-y-6">
+                      <div className="space-y-2">
+                        <h3 className="text-sm font-medium flex items-center gap-2">
+                          <DollarSign className="h-4 w-4" />
+                          Tarification manuelle (optionnel)
+                        </h3>
+                        <p className="text-sm text-muted-foreground">
+                          Définissez un prix et/ou un tier manuellement. Laissez vide pour que le système calcule automatiquement les tarifs.
+                        </p>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="cfg_price">Prix manuel (€)</Label>
+                          <Input
+                            id="cfg_price"
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            placeholder="Ex: 9.99"
+                            value={editForm.manual_price}
+                            onChange={(e) => setEditForm(prev => ({ ...prev, manual_price: e.target.value }))}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="cfg_tier">Tier</Label>
+                          <Select
+                            value={editForm.manual_tier}
+                            onValueChange={(value) => setEditForm(prev => ({ ...prev, manual_tier: value as PricingTier }))}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Calcul automatique" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="bronze">
+                                <span className="flex items-center gap-2">Bronze</span>
+                              </SelectItem>
+                              <SelectItem value="silver">
+                                <span className="flex items-center gap-2">Silver</span>
+                              </SelectItem>
+                              <SelectItem value="gold">
+                                <span className="flex items-center gap-2">Gold</span>
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+
+                      {/* Tier preview */}
+                      {editForm.manual_tier && (
+                        <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 border">
+                          <TierBadge tier={editForm.manual_tier as PricingTier} />
+                          {editForm.manual_price && (
+                            <span className="text-lg font-semibold">{parseFloat(editForm.manual_price).toFixed(2)} €</span>
+                          )}
+                          <Button
+                            variant="ghost" size="sm" className="ml-auto text-muted-foreground"
+                            onClick={() => setEditForm(prev => ({ ...prev, manual_tier: "", manual_price: "" }))}
+                          >
+                            Réinitialiser
+                          </Button>
+                        </div>
+                      )}
+
+                      <Card className="bg-muted/30 border-dashed">
+                        <CardContent className="p-4">
+                          <p className="text-xs text-muted-foreground leading-relaxed">
+                            <strong>💡 Calcul automatique :</strong> Si aucun prix ou tier n'est renseigné, le système appliquera automatiquement
+                            les règles de tarification définies dans la page <strong>Tarification → Configuration</strong>.
+                            Les valeurs manuelles activent le flag <code className="text-xs bg-muted px-1 rounded">is_manual_override</code> lors
+                            de la promotion vers Événements.
+                          </p>
+                        </CardContent>
+                      </Card>
+                    </TabsContent>
+                  </ScrollArea>
+
+                  {/* Sticky footer */}
+                  <div className="border-t px-6 py-3 flex items-center justify-between shrink-0 bg-background">
+                    <Button
+                      variant="ghost" size="sm"
+                      className="text-muted-foreground hover:text-destructive gap-2"
+                      onClick={() => setEventToDelete(selectedEvent)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Supprimer
+                    </Button>
+                    <div className="flex items-center gap-3">
+                      <Button
+                        variant="outline"
+                        onClick={handleSaveOnly}
+                        disabled={updateEventMutation.isPending}
+                      >
+                        {updateEventMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                        Enregistrer
+                      </Button>
+                      <Button
+                        onClick={handleSaveAndPromote}
+                        disabled={updateEventMutation.isPending || promoteToDraftMutation.isPending}
+                        className="gap-2"
+                      >
+                        {promoteToDraftMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Send className="h-4 w-4" />
+                        )}
+                        Envoyer vers Événements
+                      </Button>
+                    </div>
+                  </div>
+                </Tabs>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog 
@@ -948,6 +1019,16 @@ Final output: vertical poster, 1024x1536 or higher, suitable for mobile app thum
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+    </div>
+  );
+}
+
+/* Small helper component for completion indicators */
+function CompletionBadge({ done, label }: { done: boolean; label: string }) {
+  return (
+    <div className="flex items-center gap-2 text-sm">
+      <CheckCircle2 className={`h-4 w-4 ${done ? 'text-green-500' : 'text-muted-foreground/30'}`} />
+      <span className={done ? 'text-foreground' : 'text-muted-foreground'}>{label}</span>
     </div>
   );
 }
