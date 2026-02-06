@@ -1,55 +1,64 @@
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import { Pencil, RefreshCw } from 'lucide-react';
+import { Pencil, Sparkles, Loader2 } from 'lucide-react';
 import { TableCell, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { TierBadge } from '@/components/admin/TierBadge';
-import { OverrideBadge } from '@/components/admin/OverrideBadge';
+import { Input } from '@/components/ui/input';
 import { StatusBadge } from '@/components/admin/StatusBadge';
-import { useRecomputeEventPricing } from '@/hooks/usePricingMutations';
+import { useUpdateEventPrice, useSuggestPrice } from '@/hooks/usePricingMutations';
 import { useAuth } from '@/contexts/AuthContext';
-import type { EventWithPricing } from '@/hooks/usePricing';
-import type { Database } from '@/integrations/supabase/types';
-
-type PricingTier = Database['public']['Enums']['pricing_tier'];
+import { toast } from 'sonner';
+import type { EventWithPrice } from '@/hooks/usePricing';
 
 interface PricingEventsRowProps {
-  event: EventWithPricing;
-  onEdit: () => void;
+  event: EventWithPrice;
 }
 
-export function PricingEventsRow({ event, onEdit }: PricingEventsRowProps) {
+export function PricingEventsRow({ event }: PricingEventsRowProps) {
   const { t } = useTranslation();
   const { hasRole } = useAuth();
-  const recompute = useRecomputeEventPricing();
+  const updatePrice = useUpdateEventPrice();
+  const suggestPrice = useSuggestPrice();
 
   const canEdit = hasRole('admin');
-
-  const pricing = event.pricing;
-  const isOverride = pricing?.is_manual_override || false;
-  
-  // Determine effective tier and price
-  const effectiveTier: PricingTier = isOverride && pricing?.manual_tier
-    ? pricing.manual_tier
-    : pricing?.computed_tier || 'bronze';
-  
-  const effectivePrice = isOverride && pricing?.manual_price != null
-    ? pricing.manual_price
-    : pricing?.computed_price || 0;
+  const [isEditing, setIsEditing] = useState(false);
+  const [editValue, setEditValue] = useState(event.price?.toString() || '');
 
   const title = event.override_title || event.api_title || `${event.home_team} vs ${event.away_team}`;
   const eventDate = format(new Date(event.event_date), 'dd/MM/yy HH:mm', { locale: fr });
 
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('fr-FR', {
-      style: 'currency',
-      currency: 'EUR',
-    }).format(price);
+  const formatPrice = (price: number | null) => {
+    if (price == null) return '—';
+    return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(price);
   };
 
-  const handleRecompute = () => {
-    recompute.mutate(event.id);
+  const handleSave = async () => {
+    const price = editValue ? parseFloat(editValue) : null;
+    if (price != null && (price < 0.99 || price > 5.0)) {
+      toast.error('Le prix doit être entre 0,99 € et 5,00 €');
+      return;
+    }
+    await updatePrice.mutateAsync({ eventId: event.id, price });
+    setIsEditing(false);
+  };
+
+  const handleSuggest = async () => {
+    try {
+      const result = await suggestPrice.mutateAsync({
+        sport: event.sport,
+        league: event.league,
+        home_team: event.home_team,
+        away_team: event.away_team,
+        event_date: event.event_date,
+      });
+      setEditValue(result.price.toString());
+      setIsEditing(true);
+      toast.success(`Prix suggéré : ${result.price.toFixed(2)} €`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Erreur IA');
+    }
   };
 
   return (
@@ -64,14 +73,32 @@ export function PricingEventsRow({ event, onEdit }: PricingEventsRowProps) {
       </TableCell>
       <TableCell className="text-muted-foreground">{event.sport}</TableCell>
       <TableCell className="text-muted-foreground">{event.league || '-'}</TableCell>
-      <TableCell className="text-center">
-        <TierBadge tier={effectiveTier} />
-      </TableCell>
-      <TableCell className="text-right font-mono font-semibold">
-        {formatPrice(effectivePrice)}
-      </TableCell>
-      <TableCell className="text-center">
-        <OverrideBadge isOverride={isOverride} />
+      <TableCell className="text-right">
+        {isEditing ? (
+          <div className="flex items-center gap-1 justify-end">
+            <Input
+              type="number"
+              step="0.01"
+              min="0.99"
+              max="5.00"
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              className="w-20 h-8 text-right text-sm"
+              onKeyDown={(e) => e.key === 'Enter' && handleSave()}
+            />
+            <span className="text-xs text-muted-foreground">€</span>
+            <Button size="sm" variant="ghost" className="h-8 px-2" onClick={handleSave} disabled={updatePrice.isPending}>
+              ✓
+            </Button>
+            <Button size="sm" variant="ghost" className="h-8 px-2" onClick={() => setIsEditing(false)}>
+              ✗
+            </Button>
+          </div>
+        ) : (
+          <span className={`font-mono font-semibold ${event.price == null ? 'text-muted-foreground' : ''}`}>
+            {formatPrice(event.price)}
+          </span>
+        )}
       </TableCell>
       <TableCell>
         {canEdit && (
@@ -79,7 +106,7 @@ export function PricingEventsRow({ event, onEdit }: PricingEventsRowProps) {
             <Button
               variant="ghost"
               size="sm"
-              onClick={onEdit}
+              onClick={() => { setEditValue(event.price?.toString() || ''); setIsEditing(true); }}
               title={t('common.edit')}
             >
               <Pencil className="h-4 w-4" />
@@ -87,11 +114,15 @@ export function PricingEventsRow({ event, onEdit }: PricingEventsRowProps) {
             <Button
               variant="ghost"
               size="sm"
-              onClick={handleRecompute}
-              disabled={recompute.isPending}
-              title={t('pricing.recompute')}
+              onClick={handleSuggest}
+              disabled={suggestPrice.isPending}
+              title="Suggérer par IA"
             >
-              <RefreshCw className={`h-4 w-4 ${recompute.isPending ? 'animate-spin' : ''}`} />
+              {suggestPrice.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Sparkles className="h-4 w-4" />
+              )}
             </Button>
           </div>
         )}

@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { DollarSign, Crown, Medal, Award, PenLine } from 'lucide-react';
+import { DollarSign, TrendingUp, AlertCircle } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import type { PricingStats as PricingStatsType } from '@/hooks/usePricing';
@@ -10,10 +10,9 @@ interface PricingStatsProps extends Partial<PricingStatsType> {
 
 export function PricingStats({
   total = 0,
-  gold = 0,
-  silver = 0,
-  bronze = 0,
-  manual = 0,
+  withPrice = 0,
+  withoutPrice = 0,
+  averagePrice = 0,
   isLoading,
 }: PricingStatsProps) {
   const { t } = useTranslation();
@@ -26,28 +25,22 @@ export function PricingStats({
       className: 'text-foreground',
     },
     {
-      label: t('pricing.gold'),
-      value: gold,
-      icon: Crown,
-      className: 'text-tier-gold',
+      label: 'Avec prix',
+      value: withPrice,
+      icon: TrendingUp,
+      className: 'text-emerald-500',
     },
     {
-      label: t('pricing.silver'),
-      value: silver,
-      icon: Medal,
-      className: 'text-tier-silver',
-    },
-    {
-      label: t('pricing.bronze'),
-      value: bronze,
-      icon: Award,
-      className: 'text-tier-bronze',
-    },
-    {
-      label: t('common.manual'),
-      value: manual,
-      icon: PenLine,
+      label: 'Sans prix',
+      value: withoutPrice,
+      icon: AlertCircle,
       className: 'text-warning',
+    },
+    {
+      label: 'Prix moyen',
+      value: `${averagePrice.toFixed(2)} €`,
+      icon: DollarSign,
+      className: 'text-primary',
     },
   ];
 

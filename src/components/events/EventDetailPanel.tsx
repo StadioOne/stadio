@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import { Save, RefreshCw, Loader2, Archive, Trash2, X, MapPin, DollarSign, FileText, Pencil } from 'lucide-react';
+import { Save, RefreshCw, Loader2, Archive, Trash2, X, MapPin, DollarSign, FileText, Pencil, Sparkles } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -23,27 +23,25 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { StatusBadge } from '@/components/admin/StatusBadge';
-import { TierBadge } from '@/components/admin/TierBadge';
 import { LiveBadge } from './LiveBadge';
 import { TimeStatusBadge } from './TimeStatusBadge';
 import { CountryTagsInput } from './CountryTagsInput';
 import { cn } from '@/lib/utils';
+import { useSuggestPrice } from '@/hooks/usePricingMutations';
+import { toast } from 'sonner';
 import type { EventWithPricing } from '@/hooks/useEvents';
-import type { EventUpdate, PricingTier, EventPricingUpdate } from '@/lib/api-types';
+import type { EventUpdate } from '@/lib/api-types';
 
 interface EventDetailPanelProps {
   event: EventWithPricing | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSave?: (id: string, data: Partial<EventUpdate>) => void;
-  onUpdatePricing?: (eventId: string, data: EventPricingUpdate) => void;
-  onRecomputePricing?: (eventId: string) => void;
   onPublish?: (id: string) => void;
   onUnpublish?: (id: string) => void;
   onArchive?: (id: string) => void;
   onDelete?: (id: string) => void;
   isSaving?: boolean;
-  isRecomputing?: boolean;
 }
 
 export function EventDetailPanel({
@@ -51,25 +49,21 @@ export function EventDetailPanel({
   open,
   onOpenChange,
   onSave,
-  onUpdatePricing,
-  onRecomputePricing,
   onPublish,
   onUnpublish,
   onArchive,
   onDelete,
   isSaving,
-  isRecomputing,
 }: EventDetailPanelProps) {
   const { t } = useTranslation();
+  const suggestPriceMutation = useSuggestPrice();
   
   const [overrideTitle, setOverrideTitle] = useState('');
   const [overrideDescription, setOverrideDescription] = useState('');
   const [overrideImageUrl, setOverrideImageUrl] = useState('');
   const [allowedCountries, setAllowedCountries] = useState<string[]>([]);
   const [blockedCountries, setBlockedCountries] = useState<string[]>([]);
-  const [manualPrice, setManualPrice] = useState('');
-  const [manualTier, setManualTier] = useState<PricingTier | ''>('');
-  const [isManualOverride, setIsManualOverride] = useState(false);
+  const [price, setPrice] = useState('');
 
   useEffect(() => {
     if (open && event) {
@@ -78,27 +72,41 @@ export function EventDetailPanel({
       setOverrideImageUrl(event.override_image_url || '');
       setAllowedCountries(event.allowed_countries || []);
       setBlockedCountries(event.blocked_countries || []);
-      setManualPrice(event.pricing?.manual_price?.toString() || '');
-      setManualTier(event.pricing?.manual_tier || '');
-      setIsManualOverride(event.pricing?.is_manual_override || false);
+      setPrice((event as any).price?.toString() || '');
     }
   }, [open, event]);
 
   const handleSave = async () => {
     if (!event) return;
+    const priceValue = price ? parseFloat(price) : null;
+    if (priceValue != null && (priceValue < 0.99 || priceValue > 5.0)) {
+      toast.error('Le prix doit être entre 0,99 € et 5,00 €');
+      return;
+    }
     await onSave?.(event.id, {
       override_title: overrideTitle || null,
       override_description: overrideDescription || null,
       override_image_url: overrideImageUrl || null,
       allowed_countries: allowedCountries,
       blocked_countries: blockedCountries,
-    });
-    if (onUpdatePricing) {
-      await onUpdatePricing(event.id, {
-        manual_price: isManualOverride && manualPrice ? parseFloat(manualPrice) : null,
-        manual_tier: isManualOverride && manualTier ? manualTier : null,
-        is_manual_override: isManualOverride,
+      price: priceValue,
+    } as any);
+  };
+
+  const handleSuggestPrice = async () => {
+    if (!event) return;
+    try {
+      const result = await suggestPriceMutation.mutateAsync({
+        sport: event.sport,
+        league: event.league,
+        home_team: event.home_team,
+        away_team: event.away_team,
+        event_date: event.event_date,
       });
+      setPrice(result.price.toString());
+      toast.success(`Prix suggéré : ${result.price.toFixed(2)} €`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Erreur IA');
     }
   };
 
@@ -109,9 +117,7 @@ export function EventDetailPanel({
       overrideImageUrl !== (event.override_image_url || '') ||
       JSON.stringify(allowedCountries) !== JSON.stringify(event.allowed_countries || []) ||
       JSON.stringify(blockedCountries) !== JSON.stringify(event.blocked_countries || []) ||
-      manualPrice !== (event.pricing?.manual_price?.toString() || '') ||
-      manualTier !== (event.pricing?.manual_tier || '') ||
-      isManualOverride !== (event.pricing?.is_manual_override || false));
+      price !== ((event as any).price?.toString() || ''));
 
   if (!event) return null;
 
@@ -119,12 +125,7 @@ export function EventDetailPanel({
     ? format(new Date(event.event_date), 'PPP à HH:mm', { locale: fr })
     : null;
 
-  const displayPrice = isManualOverride 
-    ? (manualPrice || event.pricing?.computed_price)
-    : event.pricing?.computed_price;
-  const displayTier = isManualOverride 
-    ? (manualTier || event.pricing?.computed_tier)
-    : event.pricing?.computed_tier;
+  const currentPrice = price ? parseFloat(price) : (event as any).price;
 
   const imageUrl = overrideImageUrl || event.override_image_url || event.api_image_url;
 
@@ -201,18 +202,10 @@ export function EventDetailPanel({
 
             {/* Current pricing display */}
             <div className="rounded-lg bg-muted/50 p-4 space-y-2">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Tarification actuelle</p>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  {displayTier && <TierBadge tier={displayTier} />}
-                  {isManualOverride && (
-                    <Badge variant="outline" className="text-xs">Manuel</Badge>
-                  )}
-                </div>
-                <span className="text-xl font-bold tabular-nums">
-                  {displayPrice ? `${Number(displayPrice).toFixed(2)} €` : '—'}
-                </span>
-              </div>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Prix de vente</p>
+              <span className="text-xl font-bold tabular-nums">
+                {currentPrice ? `${Number(currentPrice).toFixed(2)} €` : '—'}
+              </span>
             </div>
           </div>
 
@@ -372,103 +365,49 @@ export function EventDetailPanel({
                   </div>
                 </TabsContent>
 
-                {/* Tab: Pricing */}
+                {/* Tab: Pricing - Simplified */}
                 <TabsContent value="pricing" className="mt-0 space-y-5">
                   <div className="bg-muted/50 rounded-lg p-4 space-y-4">
-                    {/* Manual Override Toggle */}
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <Label className="text-sm">Surcharge manuelle</Label>
-                        <p className="text-xs text-muted-foreground">
-                          Définir un prix/tier manuellement
-                        </p>
-                      </div>
-                      <Switch
-                        checked={isManualOverride}
-                        onCheckedChange={setIsManualOverride}
-                      />
-                    </div>
-
-                    {isManualOverride && (
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <Label htmlFor="manual-price" className="text-xs">Prix manuel (€)</Label>
+                    <div>
+                      <Label htmlFor="event-price" className="text-sm font-medium">Prix de vente (€)</Label>
+                      <p className="text-xs text-muted-foreground mb-2">
+                        Définissez le prix unitaire de l'événement (entre 0,99 € et 5,00 €)
+                      </p>
+                      <div className="flex items-center gap-3">
+                        <div className="relative flex-1 max-w-[200px]">
                           <Input
-                            id="manual-price"
+                            id="event-price"
                             type="number"
                             step="0.01"
-                            min="0"
-                            value={manualPrice}
-                            onChange={(e) => setManualPrice(e.target.value)}
-                            placeholder="14.99"
-                            className="mt-1"
+                            min="0.99"
+                            max="5.00"
+                            value={price}
+                            onChange={(e) => setPrice(e.target.value)}
+                            placeholder="2.99"
                           />
+                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
+                            €
+                          </span>
                         </div>
-                        <div>
-                          <Label htmlFor="manual-tier" className="text-xs">Tier manuel</Label>
-                          <Select
-                            value={manualTier}
-                            onValueChange={(value) => setManualTier(value as PricingTier)}
-                          >
-                            <SelectTrigger className="mt-1">
-                              <SelectValue placeholder="Sélectionner" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="bronze">Bronze</SelectItem>
-                              <SelectItem value="silver">Silver</SelectItem>
-                              <SelectItem value="gold">Gold</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-1.5"
+                          onClick={handleSuggestPrice}
+                          disabled={suggestPriceMutation.isPending}
+                        >
+                          {suggestPriceMutation.isPending ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Sparkles className="h-3.5 w-3.5" />
+                          )}
+                          Suggérer par IA
+                        </Button>
                       </div>
-                    )}
-
-                    {/* Current Pricing Display */}
-                    <div className="flex items-center justify-between pt-3 border-t border-border/50">
-                      <div className="flex items-center gap-2">
-                        {displayTier && <TierBadge tier={displayTier} />}
-                        {isManualOverride && (
-                          <Badge variant="outline" className="text-xs">Manuel</Badge>
-                        )}
-                      </div>
-                      <span className="text-lg font-semibold tabular-nums">
-                        {displayPrice ? `${Number(displayPrice).toFixed(2)} €` : '—'}
-                      </span>
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Min : 0,99 € — Max : 5,00 €
+                      </p>
                     </div>
-
-                    {/* Computed values */}
-                    {event.pricing && (
-                      <div className="grid grid-cols-2 gap-4 text-sm pt-3 border-t border-border/50">
-                        <div>
-                          <Label className="text-xs text-muted-foreground">Prix calculé</Label>
-                          <p className="mt-0.5">
-                            {event.pricing.computed_price
-                              ? `${Number(event.pricing.computed_price).toFixed(2)} €`
-                              : '—'}
-                          </p>
-                        </div>
-                        <div>
-                          <Label className="text-xs text-muted-foreground">Tier calculé</Label>
-                          <p className="mt-0.5">{event.pricing.computed_tier || '—'}</p>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Recompute */}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="w-full gap-2"
-                      onClick={() => onRecomputePricing?.(event.id)}
-                      disabled={isRecomputing}
-                    >
-                      {isRecomputing ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <RefreshCw className="h-3.5 w-3.5" />
-                      )}
-                      Recalculer le prix
-                    </Button>
                   </div>
                 </TabsContent>
               </div>

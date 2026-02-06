@@ -12,8 +12,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { PricingFilters } from './PricingFilters';
 import { PricingEventsRow } from './PricingEventsRow';
-import { PricingEditDialog } from './PricingEditDialog';
-import { useEventsPricing, type PricingFilters as PricingFiltersType, type EventWithPricing } from '@/hooks/usePricing';
+import { useEventsPricing, type PricingFilters as PricingFiltersType } from '@/hooks/usePricing';
 import {
   Pagination,
   PaginationContent,
@@ -28,14 +27,12 @@ const PAGE_SIZE = 20;
 export function PricingEventsTab() {
   const { t } = useTranslation();
   const [filters, setFilters] = useState<PricingFiltersType>({
-    tier: 'all',
-    overrideType: 'all',
+    priceStatus: 'all',
     status: 'all',
     search: '',
     limit: PAGE_SIZE,
     offset: 0,
   });
-  const [editingEvent, setEditingEvent] = useState<EventWithPricing | null>(null);
 
   const { data, isLoading } = useEventsPricing(filters);
 
@@ -45,111 +42,88 @@ export function PricingEventsTab() {
   const totalPages = Math.ceil(total / PAGE_SIZE);
 
   const handlePageChange = (page: number) => {
-    setFilters({
-      ...filters,
-      offset: (page - 1) * PAGE_SIZE,
-    });
+    setFilters({ ...filters, offset: (page - 1) * PAGE_SIZE });
   };
 
   return (
-    <>
-      <Card>
-        <CardHeader className="pb-4">
-          <PricingFilters filters={filters} onFiltersChange={setFilters} />
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="space-y-3">
-              {[1, 2, 3, 4, 5].map((i) => (
-                <Skeleton key={i} className="h-12 w-full" />
-              ))}
-            </div>
-          ) : events.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              {t('common.noData')}
-            </div>
-          ) : (
-            <>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>{t('events.title', 'Événement')}</TableHead>
-                    <TableHead>{t('events.sport')}</TableHead>
-                    <TableHead>{t('events.league')}</TableHead>
-                    <TableHead className="text-center">{t('pricing.tier')}</TableHead>
-                    <TableHead className="text-right">{t('pricing.price', 'Prix')}</TableHead>
-                    <TableHead className="text-center">Type</TableHead>
-                    <TableHead className="w-[100px]">{t('common.actions')}</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {events.map((event) => (
-                    <PricingEventsRow
-                      key={event.id}
-                      event={event}
-                      onEdit={() => setEditingEvent(event)}
-                    />
-                  ))}
-                </TableBody>
-              </Table>
+    <Card>
+      <CardHeader className="pb-4">
+        <PricingFilters filters={filters} onFiltersChange={setFilters} />
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <div className="space-y-3">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <Skeleton key={i} className="h-12 w-full" />
+            ))}
+          </div>
+        ) : events.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground">
+            {t('common.noData')}
+          </div>
+        ) : (
+          <>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t('events.title', 'Événement')}</TableHead>
+                  <TableHead>{t('events.sport')}</TableHead>
+                  <TableHead>{t('events.league')}</TableHead>
+                  <TableHead className="text-right">{t('pricing.price', 'Prix')}</TableHead>
+                  <TableHead className="w-[100px]">{t('common.actions')}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {events.map((event) => (
+                  <PricingEventsRow key={event.id} event={event} />
+                ))}
+              </TableBody>
+            </Table>
 
-              {/* Pagination */}
-              {totalPages > 1 && (
-                <div className="flex items-center justify-between mt-4">
-                  <p className="text-sm text-muted-foreground">
-                    {t('common.pageOf', { current: currentPage, total: totalPages })}
-                  </p>
-                  <Pagination>
-                    <PaginationContent>
-                      <PaginationItem>
-                        <PaginationPrevious
-                          onClick={() => handlePageChange(currentPage - 1)}
-                          className={currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
-                        />
-                      </PaginationItem>
-                      {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                        let pageNum: number;
-                        if (totalPages <= 5) {
-                          pageNum = i + 1;
-                        } else if (currentPage <= 3) {
-                          pageNum = i + 1;
-                        } else if (currentPage >= totalPages - 2) {
-                          pageNum = totalPages - 4 + i;
-                        } else {
-                          pageNum = currentPage - 2 + i;
-                        }
-                        return (
-                          <PaginationItem key={pageNum}>
-                            <PaginationLink
-                              onClick={() => handlePageChange(pageNum)}
-                              isActive={currentPage === pageNum}
-                              className="cursor-pointer"
-                            >
-                              {pageNum}
-                            </PaginationLink>
-                          </PaginationItem>
-                        );
-                      })}
-                      <PaginationItem>
-                        <PaginationNext
-                          onClick={() => handlePageChange(currentPage + 1)}
-                          className={currentPage === totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
-                        />
-                      </PaginationItem>
-                    </PaginationContent>
-                  </Pagination>
-                </div>
-              )}
-            </>
-          )}
-        </CardContent>
-      </Card>
-
-      <PricingEditDialog
-        event={editingEvent}
-        open={!!editingEvent}
-        onOpenChange={(open) => !open && setEditingEvent(null)}
-      />
-    </>
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between mt-4">
+                <p className="text-sm text-muted-foreground">
+                  {t('common.pageOf', { current: currentPage, total: totalPages })}
+                </p>
+                <Pagination>
+                  <PaginationContent>
+                    <PaginationItem>
+                      <PaginationPrevious
+                        onClick={() => handlePageChange(currentPage - 1)}
+                        className={currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                      />
+                    </PaginationItem>
+                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                      let pageNum: number;
+                      if (totalPages <= 5) pageNum = i + 1;
+                      else if (currentPage <= 3) pageNum = i + 1;
+                      else if (currentPage >= totalPages - 2) pageNum = totalPages - 4 + i;
+                      else pageNum = currentPage - 2 + i;
+                      return (
+                        <PaginationItem key={pageNum}>
+                          <PaginationLink
+                            onClick={() => handlePageChange(pageNum)}
+                            isActive={currentPage === pageNum}
+                            className="cursor-pointer"
+                          >
+                            {pageNum}
+                          </PaginationLink>
+                        </PaginationItem>
+                      );
+                    })}
+                    <PaginationItem>
+                      <PaginationNext
+                        onClick={() => handlePageChange(currentPage + 1)}
+                        className={currentPage === totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                      />
+                    </PaginationItem>
+                  </PaginationContent>
+                </Pagination>
+              </div>
+            )}
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 }

@@ -344,14 +344,11 @@ export default function EventsPage() {
         open={!!selectedEvent}
         onOpenChange={(open) => !open && setSelectedEvent(null)}
         onSave={handleSaveEvent}
-        onUpdatePricing={handleUpdatePricing}
-        onRecomputePricing={handleRecomputePricing}
         onPublish={handlePublish}
         onUnpublish={handleUnpublish}
         onArchive={handleArchive}
         onDelete={handleDeleteRequest}
-        isSaving={updateMutation.isPending || updatePricingMutation.isPending}
-        isRecomputing={recomputePricingMutation.isPending}
+        isSaving={updateMutation.isPending}
       />
 
       {/* Delete Confirmation Dialog */}
