@@ -1,91 +1,138 @@
 
 
-# Plan : Ajout d'une vignette Matchday Card dans le configurateur Catalogue
+# Plan : Refonte UX/UI de la page Evenements
 
-## Objectif
+## Constat actuel
 
-Ajouter un second type d'image dans l'onglet "Image" du configurateur : une **vignette Matchday** au style similaire a l'image de reference (NFL Sunday Ticket). Cette image sera generee par l'IA avec un design minimaliste montrant les logos/couleurs des deux equipes face-a-face, dans un format paysage (16:9), utilisable comme vignette dans l'application utilisateur.
+La page Evenements presente plusieurs problemes d'ergonomie :
+- Les **stats** sont de simples lignes de texte sans hierarchie visuelle -- difficile de lire les chiffres d'un coup d'oeil
+- Les **filtres** s'etalent sur 2 lignes avec des pills et selects melanges -- dense et peu lisible
+- Le panneau de detail s'ouvre dans un **Sheet lateral etroit** (comme l'ancien Catalogue) -- pas assez d'espace pour l'edition
+- Les **EventCards** en mode grille montrent beaucoup d'infos mais sans hierarchie claire
+- La pagination est basique et ne montre pas le nombre total d'elements
 
-## Schema de donnees
+## Solution proposee
 
-### Migration : ajout colonne `thumbnail_url`
+### 1. Stats en cartes visuelles
 
-Ajout d'une colonne `thumbnail_url` dans la table `events` pour stocker cette seconde image independamment du poster principal (`override_image_url`).
+Remplacer les lignes de stats inline par des **KPI cards** avec un design plus visuel (comme le Dashboard) :
+- 4 cartes principales : Total, Publies, En direct (avec pulse), Brouillons
+- Ligne secondaire compacte pour les stats temporelles (A venir, En cours, Termines)
+- Chaque carte cliquable pour filtrer directement
 
-```sql
-ALTER TABLE public.events ADD COLUMN thumbnail_url TEXT;
-```
+### 2. Barre de filtres repensee
 
-## Modifications
+Reorganiser les filtres en une seule ligne compacte et claire :
+- Barre de recherche a gauche
+- Selecteurs de statut sous forme de **Tabs** au lieu de pills (plus lisible)
+- Filtres secondaires (sport, ligue, temporel) dans un panneau "Filtres avances" pliable
+- Toggle Live et Epingles restent accessibles en permanence
+- Vue grille/liste a droite
 
-### Fichier : `src/pages/CatalogPage.tsx`
+### 3. EventCard amelioree
 
-**1. Interface CatalogEvent** : ajout de `thumbnail_url: string | null`
+Ameliorer les cartes pour une meilleure lisibilite :
+- Image plus grande avec overlay gradient ameliore
+- Informations structurees : date en haut a gauche, statut en haut a droite
+- Zone basse avec titre, equipes et infos de prix plus lisibles
+- Actions rapides au survol dans un overlay semi-transparent
 
-**2. Requete des logos equipes** : Lorsqu'un evenement est ouvert, recuperation des logos depuis la table `teams` via `home_team_id` et `away_team_id` pour les afficher comme reference visuelle dans la section vignette.
+### 4. EventDetailPanel en plein ecran (comme le Catalogue)
 
-**3. Etat du formulaire** : ajout de `thumbnail_url` dans `editForm`, plus un etat `isGeneratingThumbnail` et un `thumbnailPrompt`.
-
-**4. Onglet Image reorganise** : Deux sous-sections separees par un separateur :
-
-```text
-┌─── Onglet Image ────────────────────────────────────────────┐
-│                                                              │
-│  ── Image principale (Poster cinématique) ──                │
-│  [IA] [URL]                                                 │
-│  Prompt: [_______________________________]                  │
-│  [Générer le poster]                                        │
-│  [Aperçu poster 2:3]                                        │
-│                                                              │
-│  ─────────── Séparateur ───────────                         │
-│                                                              │
-│  ── Vignette Matchday ──                                    │
-│  "Image simplifiée avec les identités des deux équipes"     │
-│                                                              │
-│  ┌─────────┐     VS     ┌─────────┐   ← Logos récupérés    │
-│  │ Logo    │            │ Logo    │     de la table teams   │
-│  │ Home    │            │ Away    │                          │
-│  └─────────┘            └─────────┘                         │
-│                                                              │
-│  Prompt: [_______________________________]                  │
-│  [Générer la vignette IA]  [URL manuelle]                   │
-│  [Aperçu vignette 16:9]                                     │
-│                                                              │
-└──────────────────────────────────────────────────────────────┘
-```
-
-**5. Prompt de generation de la vignette** : Un template specifique inspire de l'image de reference :
+Transformer le `Sheet` lateral en `Dialog` plein ecran avec layout 2 colonnes, reprenant le meme pattern que le configurateur Catalogue :
 
 ```text
-Create a clean, modern matchday card image (16:9 landscape ratio) for a sports event.
-
-Layout:
-- Split background with two team identity colors (diagonal or vertical split)
-- Left side: visual representation of {{HOME_TEAM}} with their team emblem/crest style
-- Right side: visual representation of {{AWAY_TEAM}} with their team emblem/crest style
-- Both sides feature large, prominent team emblems/crests
-- Bottom overlay: event badge with "À venir" or competition name
-
-Teams: {{HOME_TEAM}} vs {{AWAY_TEAM}}
-Competition: {{LEAGUE}}
-Date: {{EVENT_DATE}}
-
-Style: bold colors, clean geometric shapes, professional sports broadcast aesthetic, similar to NFL Sunday Ticket / YouTube TV matchday cards.
-No real logos, no watermarks. Use stylized crests inspired by each team's identity.
++----------------------------------------------------------------------+
+|  < Retour                  Detail de l'evenement          [Actions]  |
++----------------------------------------------------------------------+
+|                              |                                        |
+|  PREVIEW (40%)              |  EDITION (60%)                         |
+|                              |                                        |
+|  +------------------------+ |  [Infos] [Editorial] [Geo] [Prix]     |
+|  |                        | |                                        |
+|  |    Image poster        | |  -- Onglet Infos (lecture seule) --    |
+|  |    ou vignette         | |  Titre API, Description, Sport, Ligue  |
+|  |                        | |  Equipes, Date, Lieu                   |
+|  +------------------------+ |                                        |
+|                              |  -- Onglet Editorial --               |
+|  Equipe A vs Equipe B      |  Titre personnalise                    |
+|  Football - La Liga         |  Description personnalisee             |
+|  06/02/2026 21:00           |  URL image personnalisee               |
+|                              |                                        |
+|  Statut : Publie            |  -- Onglet Geo --                      |
+|  Prix : 9.99 EUR            |  Pays autorises / bloques              |
+|  Tier : Gold                |                                        |
+|                              |  -- Onglet Prix --                     |
+|                              |  Surcharge manuelle (switch)           |
+|                              |  Prix / Tier manuels                   |
+|                              |  Recalcul automatique                  |
++----------------------------------------------------------------------+
+|  [Archiver]        [Publier/Depublier]  [Enregistrer]               |
++----------------------------------------------------------------------+
 ```
 
-**6. Fonction `handleGenerateThumbnail`** : Appel a la meme Edge Function `admin-ai-image` avec le prompt vignette. Le resultat est stocke dans `editForm.thumbnail_url`.
+### 5. Pagination amelioree
 
-**7. Sauvegarde** : `handleSaveOnly` et `handleSaveAndPromote` incluront `thumbnail_url` dans les updates envoyees a la base.
+Ajouter un compteur "Affichage X-Y sur Z resultats" a cote de la pagination et ameliorer la navigation pour les grands ensembles de donnees.
 
-**8. Preview colonne gauche** : Affichage de la vignette sous le poster principal en format 16:9, plus petit. Ajout d'un badge de completion "Vignette" dans les indicateurs.
+## Fichiers a modifier
 
-**9. Liste du catalogue** : Ajout d'un badge "Vignette OK" quand `thumbnail_url` est renseigne.
+| Fichier | Modification |
+|---------|-------------|
+| `src/pages/EventsPage.tsx` | Restructuration du layout general avec les nouvelles sections |
+| `src/components/events/EventsStats.tsx` | Redesign en cartes KPI cliquables |
+| `src/components/events/EventFilters.tsx` | Reorganisation en tabs + filtres avances pliables |
+| `src/components/events/EventCard.tsx` | Amelioration du design visuel et de la hierarchie d'infos |
+| `src/components/events/EventDetailPanel.tsx` | Transformation Sheet vers Dialog plein ecran 2 colonnes avec Tabs |
+
+## Details techniques
+
+### EventsStats.tsx -- Cartes KPI
+
+Les stats passent de simples lignes a des cartes structurees :
+- Grille de 4 colonnes pour les stats principales (total, publies, live, brouillons)
+- Chaque carte affiche : icone, valeur grande, label, et couleur thematique
+- La carte "Live" integre le pulse animation
+- Les stats temporelles restent en ligne compacte en dessous
+- Ajout d'un `onClick` sur chaque carte pour appliquer le filtre correspondant
+
+### EventFilters.tsx -- Tabs + filtres avances
+
+- Remplacement des pills statut par un composant `Tabs` natif de shadcn (Tous / Brouillon / Publie / Archive)
+- Les filtres secondaires (sport, ligue, temporel, live, epingled) sont regroupes dans un panneau `Collapsible` "Filtres avances"
+- La recherche et le toggle vue restent toujours visibles
+- Un badge compteur sur "Filtres avances" indique le nombre de filtres actifs
+
+### EventCard.tsx -- Ameliorations visuelles
+
+- Augmentation du ratio de l'image (de aspect-video a plus grand)
+- Le prix s'affiche en bas a droite avec un fond semi-transparent
+- Le tier s'affiche sous forme de badge couleur integre a l'image
+- Les badges Live/Pinned sont repositionnes pour moins de chevauchement
+- Animation d'entree plus fluide
+
+### EventDetailPanel.tsx -- Dialog plein ecran
+
+Transformation complete identique au configurateur Catalogue :
+- `Sheet` remplace par `Dialog` avec `DialogContent` en `max-w-[95vw] h-[95vh]`
+- Layout flex 2 colonnes (40/60)
+- Colonne gauche : preview avec image, metadonnees, statut, prix actuel
+- Colonne droite : 4 onglets (Infos, Editorial, Geo, Tarification) via `Tabs`
+- Footer sticky avec actions (Archiver, Supprimer, Publier/Depublier, Enregistrer)
+- Responsive : empilement vertical sous 1024px
+
+### EventsPage.tsx -- Orchestration
+
+- Integration des props `onClickStat` dans `EventsStats` pour filtrage rapide
+- Mise a jour du compteur de pagination "X-Y sur Z"
+- Pas de changement dans la logique metier (mutations, hooks, etc.)
 
 ## Ce qui ne change PAS
 
-- L'Edge Function `admin-ai-image` (reutilisee avec un prompt different)
-- Le bucket de stockage `event-images`
-- Les onglets Contenu, Diffusion et Tarification
-- La logique de promotion vers draft
+- Les hooks de donnees (`useEvents`, `useEventsStats`, `useEventMutations`)
+- La logique metier (publish, unpublish, archive, delete, pricing)
+- Le composant `DeleteEventDialog`
+- Les badges existants (`StatusBadge`, `TierBadge`, `LiveBadge`, etc.)
+- Le composant `EventRow` (vue liste) -- ameliorations mineures seulement
+- Le composant `CountryTagsInput`
 
