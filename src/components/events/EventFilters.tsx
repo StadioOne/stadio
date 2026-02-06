@@ -1,9 +1,16 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Search, LayoutGrid, List, Radio, Star, X, Clock, CalendarClock, Play, CheckCircle2 } from 'lucide-react';
+import { Search, LayoutGrid, List, Radio, Star, X, SlidersHorizontal } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Toggle } from '@/components/ui/toggle';
+import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 import {
   Select,
   SelectContent,
@@ -28,20 +35,6 @@ interface EventFiltersProps {
   onTimeStatusChange: (status: TimeStatusFilter) => void;
 }
 
-const STATUS_OPTIONS = [
-  { value: 'all', label: 'Tous' },
-  { value: 'draft', label: 'Brouillon' },
-  { value: 'published', label: 'Publié' },
-  { value: 'archived', label: 'Archivé' },
-] as const;
-
-const TIME_STATUS_OPTIONS = [
-  { value: 'all', label: 'Tous', icon: Clock },
-  { value: 'upcoming', label: 'À venir', icon: CalendarClock },
-  { value: 'ongoing', label: 'En cours', icon: Play },
-  { value: 'finished', label: 'Terminés', icon: CheckCircle2 },
-] as const;
-
 export function EventFilters({
   filters,
   onFiltersChange,
@@ -54,8 +47,8 @@ export function EventFilters({
 }: EventFiltersProps) {
   const { t } = useTranslation();
   const [searchValue, setSearchValue] = useState(filters.search || '');
+  const [advancedOpen, setAdvancedOpen] = useState(false);
 
-  // Debounced search
   const handleSearchChange = useCallback(
     (value: string) => {
       setSearchValue(value);
@@ -70,7 +63,7 @@ export function EventFilters({
   const handleStatusChange = (status: string) => {
     onFiltersChange({
       ...filters,
-      status: status as EventsFilters['status'],
+      status: status === 'all' ? undefined : status as EventsFilters['status'],
       offset: 0,
     });
   };
@@ -79,7 +72,7 @@ export function EventFilters({
     onFiltersChange({
       ...filters,
       sport: sport === 'all' ? undefined : sport,
-      league: undefined, // Reset league when sport changes
+      league: undefined,
       offset: 0,
     });
   };
@@ -111,32 +104,38 @@ export function EventFilters({
   const clearFilters = () => {
     setSearchValue('');
     onTimeStatusChange('all');
-    onFiltersChange({
-      limit: filters.limit,
-      offset: 0,
-    });
+    onFiltersChange({ limit: filters.limit, offset: 0 });
   };
 
-  const hasActiveFilters =
-    filters.status !== 'all' &&
-    filters.status !== undefined ||
+  const activeStatus = filters.status || 'all';
+
+  // Count active advanced filters
+  const advancedFilterCount = useMemo(() => {
+    let count = 0;
+    if (filters.sport) count++;
+    if (filters.league) count++;
+    if (filters.isLive) count++;
+    if (filters.isPinned) count++;
+    if (timeStatus !== 'all') count++;
+    return count;
+  }, [filters.sport, filters.league, filters.isLive, filters.isPinned, timeStatus]);
+
+  const hasActiveFilters = !!(
+    filters.status ||
     filters.sport ||
     filters.league ||
     filters.isLive ||
     filters.isPinned ||
     filters.search ||
-    timeStatus !== 'all';
-
-  // Filter leagues based on selected sport (if sport data is available)
-  const filteredLeagues = filters.sport
-    ? leagues
-    : leagues;
+    timeStatus !== 'all'
+  );
 
   return (
-    <div className="space-y-4">
-      {/* Search and View Toggle */}
-      <div className="flex items-center gap-3">
-        <div className="relative flex-1 max-w-sm">
+    <div className="space-y-3">
+      {/* Main row: Search + Status Tabs + View Toggle */}
+      <div className="flex items-center gap-3 flex-wrap">
+        {/* Search */}
+        <div className="relative flex-1 min-w-[200px] max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder={t('common.search')}
@@ -146,157 +145,154 @@ export function EventFilters({
           />
         </div>
 
-        <div className="flex items-center gap-1 bg-muted p-1 rounded-lg">
-          <Button
-            variant="ghost"
-            size="sm"
-            className={cn(
-              'h-8 w-8 p-0',
-              viewMode === 'grid' && 'bg-background shadow-sm'
-            )}
-            onClick={() => onViewModeChange('grid')}
-          >
-            <LayoutGrid className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className={cn(
-              'h-8 w-8 p-0',
-              viewMode === 'list' && 'bg-background shadow-sm'
-            )}
-            onClick={() => onViewModeChange('list')}
-          >
-            <List className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
+        {/* Status Tabs */}
+        <Tabs value={activeStatus} onValueChange={handleStatusChange} className="flex-shrink-0">
+          <TabsList>
+            <TabsTrigger value="all">Tous</TabsTrigger>
+            <TabsTrigger value="draft">Brouillon</TabsTrigger>
+            <TabsTrigger value="published">Publié</TabsTrigger>
+            <TabsTrigger value="archived">Archivé</TabsTrigger>
+          </TabsList>
+        </Tabs>
 
-      {/* Filter Chips */}
-      <div className="flex flex-wrap items-center gap-2">
-        {/* Status Pills */}
-        <div className="flex items-center gap-1">
-          {STATUS_OPTIONS.map((option) => (
-            <button
-              key={option.value}
-              onClick={() => handleStatusChange(option.value)}
-              className={cn(
-                'px-3 py-1.5 text-sm font-medium rounded-full transition-colors',
-                (filters.status === option.value ||
-                  (option.value === 'all' && !filters.status)) &&
-                  'bg-primary text-primary-foreground',
-                (filters.status !== option.value &&
-                  !(option.value === 'all' && !filters.status)) &&
-                  'bg-muted hover:bg-muted/80 text-muted-foreground'
-              )}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-
-        <div className="h-4 w-px bg-border" />
-
-        {/* Time Status Pills */}
-        <div className="flex items-center gap-1">
-          {TIME_STATUS_OPTIONS.map((option) => {
-            const Icon = option.icon;
-            return (
-              <button
-                key={option.value}
-                onClick={() => onTimeStatusChange(option.value as TimeStatusFilter)}
-                className={cn(
-                  'px-3 py-1.5 text-sm font-medium rounded-full transition-colors flex items-center gap-1.5',
-                  timeStatus === option.value &&
-                    'bg-secondary text-secondary-foreground',
-                  timeStatus !== option.value &&
-                    'bg-muted/50 hover:bg-muted text-muted-foreground'
+        {/* Advanced filters trigger + View toggle */}
+        <div className="flex items-center gap-2 ml-auto">
+          <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
+            <CollapsibleTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-1.5 h-9">
+                <SlidersHorizontal className="h-3.5 w-3.5" />
+                Filtres
+                {advancedFilterCount > 0 && (
+                  <Badge variant="secondary" className="h-5 px-1.5 text-xs ml-0.5">
+                    {advancedFilterCount}
+                  </Badge>
                 )}
-              >
-                <Icon className="h-3.5 w-3.5" />
-                {option.label}
-              </button>
-            );
-          })}
-        </div>
+              </Button>
+            </CollapsibleTrigger>
+          </Collapsible>
 
-        <div className="h-4 w-px bg-border" />
-
-        {/* Sport Select */}
-        <Select
-          value={filters.sport || 'all'}
-          onValueChange={handleSportChange}
-        >
-          <SelectTrigger className="w-[140px] h-9">
-            <SelectValue placeholder="Sport" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Tous les sports</SelectItem>
-            {sports.map((sport) => (
-              <SelectItem key={sport} value={sport}>
-                {sport}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        {/* League Select */}
-        <Select
-          value={filters.league || 'all'}
-          onValueChange={handleLeagueChange}
-        >
-          <SelectTrigger className="w-[160px] h-9">
-            <SelectValue placeholder="Ligue" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Toutes les ligues</SelectItem>
-            {filteredLeagues.map((league) => (
-              <SelectItem key={league} value={league}>
-                {league}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <div className="h-4 w-px bg-border" />
-
-        {/* Toggle Filters */}
-        <Toggle
-          pressed={filters.isLive === true}
-          onPressedChange={toggleLiveFilter}
-          size="sm"
-          className="gap-1.5 data-[state=on]:bg-status-live/10 data-[state=on]:text-status-live"
-        >
-          <Radio className="h-3.5 w-3.5" />
-          Live
-        </Toggle>
-
-        <Toggle
-          pressed={filters.isPinned === true}
-          onPressedChange={togglePinnedFilter}
-          size="sm"
-          className="gap-1.5 data-[state=on]:bg-tier-gold/10 data-[state=on]:text-tier-gold"
-        >
-          <Star className="h-3.5 w-3.5" />
-          Épinglés
-        </Toggle>
-
-        {/* Clear Filters */}
-        {hasActiveFilters && (
-          <>
-            <div className="h-4 w-px bg-border" />
+          {hasActiveFilters && (
             <Button
               variant="ghost"
               size="sm"
               onClick={clearFilters}
-              className="h-8 gap-1 text-muted-foreground hover:text-foreground"
+              className="h-9 gap-1 text-muted-foreground hover:text-foreground"
             >
               <X className="h-3.5 w-3.5" />
-              Réinitialiser
             </Button>
-          </>
-        )}
+          )}
+
+          <div className="h-6 w-px bg-border" />
+
+          <div className="flex items-center gap-0.5 bg-muted p-0.5 rounded-lg">
+            <Button
+              variant="ghost"
+              size="sm"
+              className={cn(
+                'h-8 w-8 p-0',
+                viewMode === 'grid' && 'bg-background shadow-sm'
+              )}
+              onClick={() => onViewModeChange('grid')}
+            >
+              <LayoutGrid className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className={cn(
+                'h-8 w-8 p-0',
+                viewMode === 'list' && 'bg-background shadow-sm'
+              )}
+              onClick={() => onViewModeChange('list')}
+            >
+              <List className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
       </div>
+
+      {/* Advanced Filters Panel (Collapsible) */}
+      <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
+        <CollapsibleContent>
+          <div className="flex flex-wrap items-center gap-3 p-3 bg-muted/30 rounded-lg border border-border/50">
+            {/* Sport Select */}
+            <Select value={filters.sport || 'all'} onValueChange={handleSportChange}>
+              <SelectTrigger className="w-[150px] h-9 bg-background">
+                <SelectValue placeholder="Sport" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tous les sports</SelectItem>
+                {sports.map((sport) => (
+                  <SelectItem key={sport} value={sport}>
+                    {sport}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {/* League Select */}
+            <Select value={filters.league || 'all'} onValueChange={handleLeagueChange}>
+              <SelectTrigger className="w-[170px] h-9 bg-background">
+                <SelectValue placeholder="Ligue" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Toutes les ligues</SelectItem>
+                {leagues.map((league) => (
+                  <SelectItem key={league} value={league}>
+                    {league}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <div className="h-6 w-px bg-border" />
+
+            {/* Time status pills */}
+            <div className="flex items-center gap-1">
+              {(['all', 'upcoming', 'ongoing', 'finished'] as const).map((ts) => {
+                const labels = { all: 'Temps: Tous', upcoming: 'À venir', ongoing: 'En cours', finished: 'Terminés' };
+                return (
+                  <button
+                    key={ts}
+                    onClick={() => onTimeStatusChange(ts)}
+                    className={cn(
+                      'px-2.5 py-1 text-xs font-medium rounded-md transition-colors',
+                      timeStatus === ts
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-background hover:bg-muted text-muted-foreground border border-border/50'
+                    )}
+                  >
+                    {labels[ts]}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="h-6 w-px bg-border" />
+
+            {/* Live & Pinned toggles */}
+            <Toggle
+              pressed={filters.isLive === true}
+              onPressedChange={toggleLiveFilter}
+              size="sm"
+              className="gap-1.5 h-8 data-[state=on]:bg-status-live/10 data-[state=on]:text-status-live"
+            >
+              <Radio className="h-3.5 w-3.5" />
+              Live
+            </Toggle>
+
+            <Toggle
+              pressed={filters.isPinned === true}
+              onPressedChange={togglePinnedFilter}
+              size="sm"
+              className="gap-1.5 h-8 data-[state=on]:bg-tier-gold/10 data-[state=on]:text-tier-gold"
+            >
+              <Star className="h-3.5 w-3.5" />
+              Épinglés
+            </Toggle>
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
     </div>
   );
 }
