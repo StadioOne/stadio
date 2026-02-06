@@ -1,58 +1,36 @@
 import { useTranslation } from "react-i18next";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { TrendingUp, DollarSign, Radio, Calendar } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { DashboardKPIGrid } from "@/components/dashboard/DashboardKPIGrid";
+import { UpcomingEventsCard } from "@/components/dashboard/UpcomingEventsCard";
+import { RecentActivityCard } from "@/components/dashboard/RecentActivityCard";
+import { QuickActionsCard } from "@/components/dashboard/QuickActionsCard";
 
 export default function DashboardPage() {
   const { t } = useTranslation();
+  const { user } = useAuth();
 
-  const kpis = [
-    { label: t("dashboard.kpis.ppvSales"), value: "—", icon: TrendingUp, trend: null },
-    { label: t("dashboard.kpis.revenue"), value: "—", icon: DollarSign, trend: null },
-    { label: t("dashboard.kpis.liveEvents"), value: "0", icon: Radio, trend: null },
-    { label: t("dashboard.kpis.upcomingEvents"), value: "0", icon: Calendar, trend: null },
-  ];
+  const firstName =
+    user?.user_metadata?.full_name?.split(" ")[0] ||
+    user?.email?.split("@")[0] ||
+    "";
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold">{t("dashboard.title")}</h1>
-        <p className="text-muted-foreground">{t("dashboard.welcome")}</p>
+        <h1 className="text-2xl font-semibold">
+          {t("dashboard.greeting", { name: firstName })}
+        </h1>
+        <p className="text-muted-foreground">{t("dashboard.subtitle")}</p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {kpis.map((kpi) => (
-          <Card key={kpi.label} className="card-hover">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                {kpi.label}
-              </CardTitle>
-              <kpi.icon className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{kpi.value}</div>
-            </CardContent>
-          </Card>
-        ))}
+      <DashboardKPIGrid />
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <UpcomingEventsCard />
+        <RecentActivityCard />
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">{t("dashboard.kpis.topEvents")}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">{t("common.noData")}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">{t("dashboard.kpis.topOriginals")}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">{t("common.noData")}</p>
-          </CardContent>
-        </Card>
-      </div>
+      <QuickActionsCard />
     </div>
   );
 }
