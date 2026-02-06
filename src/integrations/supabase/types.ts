@@ -554,6 +554,7 @@ export type Database = {
           override_description: string | null
           override_image_url: string | null
           override_title: string | null
+          price: number | null
           published_at: string | null
           round: string | null
           season: number | null
@@ -593,6 +594,7 @@ export type Database = {
           override_description?: string | null
           override_image_url?: string | null
           override_title?: string | null
+          price?: number | null
           published_at?: string | null
           round?: string | null
           season?: number | null
@@ -632,6 +634,7 @@ export type Database = {
           override_description?: string | null
           override_image_url?: string | null
           override_title?: string | null
+          price?: number | null
           published_at?: string | null
           round?: string | null
           season?: number | null

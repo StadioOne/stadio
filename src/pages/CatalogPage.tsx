@@ -58,9 +58,7 @@ import {
   Tv,
 } from "lucide-react";
 import type { Database } from "@/integrations/supabase/types";
-import { TierBadge } from "@/components/admin/TierBadge";
-
-type PricingTier = Database["public"]["Enums"]["pricing_tier"];
+import { supabase as supabaseClient } from "@/integrations/supabase/client";
 
 interface CatalogEvent {
   id: string;
@@ -107,12 +105,12 @@ export default function CatalogPage() {
     thumbnail_url: "",
     broadcaster: "",
     broadcaster_logo_url: "",
-    manual_price: "",
-    manual_tier: "" as PricingTier | "",
+    price: "",
   });
   const [isGeneratingDescription, setIsGeneratingDescription] = useState(false);
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   const [isGeneratingThumbnail, setIsGeneratingThumbnail] = useState(false);
+  const [isSuggestingPrice, setIsSuggestingPrice] = useState(false);
   const [imagePrompt, setImagePrompt] = useState("");
   const [thumbnailPrompt, setThumbnailPrompt] = useState("");
   const [showManualImageUrl, setShowManualImageUrl] = useState(false);
@@ -217,22 +215,16 @@ export default function CatalogPage() {
       
       if (eventError) throw eventError;
 
-      const hasManualValues = !!(editForm.manual_price || editForm.manual_tier);
-      const manualPriceValue = editForm.manual_price ? parseFloat(editForm.manual_price) : null;
+      const priceValue = editForm.price ? parseFloat(editForm.price) : null;
       
-      const { error: pricingError } = await supabase
-        .from('event_pricing')
-        .upsert({
-          event_id: eventId,
-          manual_price: manualPriceValue,
-          manual_tier: editForm.manual_tier || null,
-          computed_price: hasManualValues ? manualPriceValue : null,
-          computed_tier: hasManualValues ? (editForm.manual_tier || null) : null,
-          is_manual_override: hasManualValues,
-          updated_at: new Date().toISOString(),
-        }, { onConflict: 'event_id' });
-      
-      if (pricingError) throw pricingError;
+      // Update price directly on events table
+      if (priceValue != null) {
+        const { error: priceError } = await supabase
+          .from('events')
+          .update({ price: priceValue })
+          .eq('id', eventId);
+        if (priceError) throw priceError;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['catalog-events'] });
@@ -324,8 +316,7 @@ IMPORTANT: Generate a HORIZONTAL/LANDSCAPE image with aspect ratio 16:9 (wider t
       thumbnail_url: event.thumbnail_url || "",
       broadcaster: event.broadcaster || "",
       broadcaster_logo_url: event.broadcaster_logo_url || "",
-      manual_price: "",
-      manual_tier: "",
+      price: "",
     });
     setImagePrompt(generateDefaultImagePrompt(event));
     setThumbnailPrompt(generateDefaultThumbnailPrompt(event));
@@ -1104,76 +1095,86 @@ IMPORTANT: Generate a HORIZONTAL/LANDSCAPE image with aspect ratio 16:9 (wider t
                       <div className="space-y-2">
                         <h3 className="text-sm font-medium flex items-center gap-2">
                           <DollarSign className="h-4 w-4" />
-                          Tarification manuelle (optionnel)
+                          Prix de vente
                         </h3>
                         <p className="text-sm text-muted-foreground">
-                          Définissez un prix et/ou un tier manuellement. Laissez vide pour que le système calcule automatiquement les tarifs.
+                          Définissez le prix unitaire de l'événement (entre 0,99 € et 5,00 €). Vous pouvez utiliser l'IA pour obtenir une suggestion.
                         </p>
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="cfg_price">Prix manuel (€)</Label>
+                      <div className="flex items-center gap-3">
+                        <div className="relative max-w-[200px]">
                           <Input
                             id="cfg_price"
                             type="number"
                             step="0.01"
-                            min="0"
-                            placeholder="Ex: 9.99"
-                            value={editForm.manual_price}
-                            onChange={(e) => setEditForm(prev => ({ ...prev, manual_price: e.target.value }))}
+                            min="0.99"
+                            max="5.00"
+                            placeholder="2.99"
+                            value={editForm.price}
+                            onChange={(e) => setEditForm(prev => ({ ...prev, price: e.target.value }))}
                           />
+                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">€</span>
                         </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="cfg_tier">Tier</Label>
-                          <Select
-                            value={editForm.manual_tier}
-                            onValueChange={(value) => setEditForm(prev => ({ ...prev, manual_tier: value as PricingTier }))}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Calcul automatique" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="bronze">
-                                <span className="flex items-center gap-2">Bronze</span>
-                              </SelectItem>
-                              <SelectItem value="silver">
-                                <span className="flex items-center gap-2">Silver</span>
-                              </SelectItem>
-                              <SelectItem value="gold">
-                                <span className="flex items-center gap-2">Gold</span>
-                              </SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-
-                      {/* Tier preview */}
-                      {editForm.manual_tier && (
-                        <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 border">
-                          <TierBadge tier={editForm.manual_tier as PricingTier} />
-                          {editForm.manual_price && (
-                            <span className="text-lg font-semibold">{parseFloat(editForm.manual_price).toFixed(2)} €</span>
+                        <Button
+                          variant="outline" size="sm"
+                          className="gap-1.5"
+                          disabled={isSuggestingPrice || !selectedEvent}
+                          onClick={async () => {
+                            if (!selectedEvent) return;
+                            setIsSuggestingPrice(true);
+                            try {
+                              const session = await supabase.auth.getSession();
+                              if (!session.data.session) { toast.error('Non authentifié'); return; }
+                              const response = await fetch(
+                                `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-ai-suggest-price`,
+                                {
+                                  method: 'POST',
+                                  headers: {
+                                    'Content-Type': 'application/json',
+                                    'Authorization': `Bearer ${session.data.session.access_token}`,
+                                  },
+                                  body: JSON.stringify({
+                                    sport: selectedEvent.sport,
+                                    league: selectedEvent.league,
+                                    home_team: selectedEvent.home_team,
+                                    away_team: selectedEvent.away_team,
+                                    event_date: selectedEvent.event_date,
+                                  }),
+                                }
+                              );
+                              const result = await response.json();
+                              if (!response.ok || !result.success) throw new Error(result.error || 'Erreur IA');
+                              setEditForm(prev => ({ ...prev, price: result.data.price.toString() }));
+                              toast.success(`Prix suggéré : ${result.data.price.toFixed(2)} €`);
+                            } catch (error) {
+                              toast.error(error instanceof Error ? error.message : 'Erreur IA');
+                            } finally {
+                              setIsSuggestingPrice(false);
+                            }
+                          }}
+                        >
+                          {isSuggestingPrice ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Sparkles className="h-3.5 w-3.5" />
                           )}
+                          Suggérer par IA
+                        </Button>
+                      </div>
+                      <p className="text-xs text-muted-foreground">Min : 0,99 € — Max : 5,00 €</p>
+
+                      {editForm.price && (
+                        <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 border">
+                          <span className="text-lg font-semibold">{parseFloat(editForm.price).toFixed(2)} €</span>
                           <Button
                             variant="ghost" size="sm" className="ml-auto text-muted-foreground"
-                            onClick={() => setEditForm(prev => ({ ...prev, manual_tier: "", manual_price: "" }))}
+                            onClick={() => setEditForm(prev => ({ ...prev, price: "" }))}
                           >
                             Réinitialiser
                           </Button>
                         </div>
                       )}
-
-                      <Card className="bg-muted/30 border-dashed">
-                        <CardContent className="p-4">
-                          <p className="text-xs text-muted-foreground leading-relaxed">
-                            <strong>💡 Calcul automatique :</strong> Si aucun prix ou tier n'est renseigné, le système appliquera automatiquement
-                            les règles de tarification définies dans la page <strong>Tarification → Configuration</strong>.
-                            Les valeurs manuelles activent le flag <code className="text-xs bg-muted px-1 rounded">is_manual_override</code> lors
-                            de la promotion vers Événements.
-                          </p>
-                        </CardContent>
-                      </Card>
                     </TabsContent>
                   </ScrollArea>
 

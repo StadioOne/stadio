@@ -65,3 +65,6 @@ verify_jwt = false
 
 [functions.admin-ai-image]
 verify_jwt = false
+
+[functions.admin-ai-suggest-price]
+verify_jwt = false

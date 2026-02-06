@@ -9,31 +9,20 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import type { PricingFilters } from '@/hooks/usePricing';
-import type { Database } from '@/integrations/supabase/types';
-
-type PricingTier = Database['public']['Enums']['pricing_tier'];
+import type { PricingFilters as PricingFiltersType } from '@/hooks/usePricing';
 
 interface PricingFiltersProps {
-  filters: PricingFilters;
-  onFiltersChange: (filters: PricingFilters) => void;
+  filters: PricingFiltersType;
+  onFiltersChange: (filters: PricingFiltersType) => void;
 }
 
 export function PricingFilters({ filters, onFiltersChange }: PricingFiltersProps) {
   const { t } = useTranslation();
 
-  const handleTierChange = (value: string) => {
+  const handlePriceStatusChange = (value: string) => {
     onFiltersChange({
       ...filters,
-      tier: value as PricingTier | 'all',
-      offset: 0,
-    });
-  };
-
-  const handleOverrideTypeChange = (value: string) => {
-    onFiltersChange({
-      ...filters,
-      overrideType: value as 'all' | 'computed' | 'manual',
+      priceStatus: value as 'all' | 'with_price' | 'without_price',
       offset: 0,
     });
   };
@@ -55,15 +44,13 @@ export function PricingFilters({ filters, onFiltersChange }: PricingFiltersProps
   };
 
   const hasActiveFilters =
-    (filters.tier && filters.tier !== 'all') ||
-    (filters.overrideType && filters.overrideType !== 'all') ||
+    (filters.priceStatus && filters.priceStatus !== 'all') ||
     (filters.status && filters.status !== 'all') ||
     filters.search;
 
   const clearFilters = () => {
     onFiltersChange({
-      tier: 'all',
-      overrideType: 'all',
+      priceStatus: 'all',
       status: 'all',
       search: '',
       limit: filters.limit,
@@ -73,28 +60,15 @@ export function PricingFilters({ filters, onFiltersChange }: PricingFiltersProps
 
   return (
     <div className="flex items-center gap-3 flex-wrap">
-      {/* Tier filter */}
-      <Select value={filters.tier || 'all'} onValueChange={handleTierChange}>
-        <SelectTrigger className="w-[140px]">
-          <SelectValue placeholder={t('pricing.tier')} />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">{t('common.all')} Tiers</SelectItem>
-          <SelectItem value="gold">{t('pricing.gold')}</SelectItem>
-          <SelectItem value="silver">{t('pricing.silver')}</SelectItem>
-          <SelectItem value="bronze">{t('pricing.bronze')}</SelectItem>
-        </SelectContent>
-      </Select>
-
-      {/* Override type filter */}
-      <Select value={filters.overrideType || 'all'} onValueChange={handleOverrideTypeChange}>
-        <SelectTrigger className="w-[140px]">
-          <SelectValue placeholder="Type" />
+      {/* Price status filter */}
+      <Select value={filters.priceStatus || 'all'} onValueChange={handlePriceStatusChange}>
+        <SelectTrigger className="w-[160px]">
+          <SelectValue placeholder="Prix" />
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="all">{t('common.all')}</SelectItem>
-          <SelectItem value="computed">{t('common.computed')}</SelectItem>
-          <SelectItem value="manual">{t('common.manual')}</SelectItem>
+          <SelectItem value="with_price">Avec prix</SelectItem>
+          <SelectItem value="without_price">Sans prix</SelectItem>
         </SelectContent>
       </Select>
 

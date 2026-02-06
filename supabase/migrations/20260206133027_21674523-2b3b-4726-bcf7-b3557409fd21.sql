@@ -1,0 +1,1 @@
+ALTER TABLE public.events ADD COLUMN price NUMERIC(5,2) DEFAULT NULL;
