@@ -16,6 +16,9 @@ import AuthorsPage from "@/pages/AuthorsPage";
 import UsersPage from "@/pages/UsersPage";
 import AuditLogPage from "@/pages/AuditLogPage";
 import EdgeFunctionsPage from "@/pages/EdgeFunctionsPage";
+import AnalyticsPage from "@/pages/AnalyticsPage";
+import AnalyticsFixturesPage from "@/pages/AnalyticsFixturesPage";
+import AnalyticsOriginalsPage from "@/pages/AnalyticsOriginalsPage";
 import ApiSportsSettingsPage from "@/pages/ApiSportsSettingsPage";
 import CatalogPage from "@/pages/CatalogPage";
 import BroadcastersPage from "@/pages/BroadcastersPage";
@@ -75,6 +78,9 @@ function AppRoutes() {
         <Route path="/users" element={<UsersPage />} />
         <Route path="/audit" element={<AuditLogPage />} />
         <Route path="/edge-functions" element={<EdgeFunctionsPage />} />
+        <Route path="/analytics" element={<AnalyticsPage />} />
+        <Route path="/analytics/fixtures" element={<AnalyticsFixturesPage />} />
+        <Route path="/analytics/originals" element={<AnalyticsOriginalsPage />} />
         <Route path="/settings/api-sports" element={<ApiSportsSettingsPage />} />
         <Route path="/broadcasters" element={<BroadcastersPage />} />
       </Route>

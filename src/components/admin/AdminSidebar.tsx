@@ -13,8 +13,11 @@ import {
   Users,
   ClipboardList,
   Server,
+  BarChart3,
   PenTool,
   ChevronDown,
+  Eye,
+  Tv,
   Settings,
   Zap,
   Package,
@@ -61,6 +64,12 @@ const adminNavItems = [
   { key: "edgeFunctions", path: "/edge-functions", icon: Server },
 ];
 
+const analyticsSubItems = [
+  { key: "overview", path: "/analytics", label: "Vue d'ensemble", icon: BarChart3 },
+  { key: "fixtures", path: "/analytics/fixtures", label: "Événements", icon: Calendar },
+  { key: "originals", path: "/analytics/originals", label: "Originals", icon: Tv },
+];
+
 const settingsSubItems = [
   { key: "apiSports", path: "/settings/api-sports", label: "API Sports", icon: Zap },
 ];
@@ -75,6 +84,7 @@ export function AdminSidebar() {
     return location.pathname === path || location.pathname.startsWith(path + "/");
   };
 
+  const isAnalyticsActive = location.pathname.startsWith("/analytics");
   const isSettingsActive = location.pathname.startsWith("/settings");
 
   // Logo adapté au thème
@@ -123,6 +133,35 @@ export function AdminSidebar() {
           <SidebarGroupLabel>Administration</SidebarGroupLabel>
           <SidebarGroupContent>
             {renderNavItems(adminNavItems)}
+            
+            {/* Analytics with sub-navigation */}
+            <SidebarMenu>
+              <Collapsible defaultOpen={isAnalyticsActive} className="group/collapsible">
+                <SidebarMenuItem>
+                  <CollapsibleTrigger asChild>
+                    <SidebarMenuButton isActive={isAnalyticsActive}>
+                      <BarChart3 className="h-4 w-4" />
+                      <span>{t('nav.analytics')}</span>
+                      <ChevronDown className="ml-auto h-4 w-4 transition-transform group-data-[state=open]/collapsible:rotate-180" />
+                    </SidebarMenuButton>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <SidebarMenuSub>
+                      {analyticsSubItems.map((item) => (
+                        <SidebarMenuSubItem key={item.key}>
+                          <SidebarMenuSubButton asChild isActive={location.pathname === item.path}>
+                            <Link to={item.path}>
+                              <item.icon className="h-3.5 w-3.5" />
+                              <span>{item.label}</span>
+                            </Link>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      ))}
+                    </SidebarMenuSub>
+                  </CollapsibleContent>
+                </SidebarMenuItem>
+              </Collapsible>
+            </SidebarMenu>
             
             {/* Settings with sub-navigation */}
             <SidebarMenu>

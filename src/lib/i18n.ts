@@ -601,6 +601,18 @@ const fr = {
       recomputeNotoriety: "Recalculer notoriété",
     },
   },
+  analytics: {
+    title: "Analytics",
+    subtitle: "Statistiques et performances",
+    salesByGeo: "Ventes par zone géographique",
+    contentPerformance: "Performance des contenus",
+    period: "Période",
+    country: "Pays",
+    zone: "Zone",
+    views: "Vues",
+    purchases: "Achats",
+    revenue: "Revenus",
+  },
 };
 
 // English translations
@@ -1114,6 +1126,18 @@ const en = {
       rebuildLists: "Rebuild lists",
       recomputeNotoriety: "Recompute notoriety",
     },
+  },
+  analytics: {
+    title: "Analytics",
+    subtitle: "Statistics and performance",
+    salesByGeo: "Sales by geography",
+    contentPerformance: "Content performance",
+    period: "Period",
+    country: "Country",
+    zone: "Zone",
+    views: "Views",
+    purchases: "Purchases",
+    revenue: "Revenue",
   },
 };
 
